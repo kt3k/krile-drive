@@ -1,0 +1,2464 @@
+<!doctype html>
+<html>
+  <head>
+    <title>map_editor.html</title>
+    <meta name="viewport" content="
+      width=device-width,
+      initial-scale=1.0,
+      maximum-scale=1.0,
+      user-scalable=0,
+      target-densitydpi=device-dpi" />
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <script style="text/javascript" src="my_globals.js"></script>
+    <script>
+//
+// global elements
+//
+Math.random.choice = function(array) {
+    return array[Math.floor(this() * array.length)];
+};
+
+Math.random.range = function(n){
+    return Math.floor(this() * n);
+};
+
+Math.random.hue = function() {
+    return this.range(360).toString();
+};
+
+Math.random.saturation = function() {
+    return this.range(101).toString() + '%';
+}
+
+Math.random.lightness = function() {
+    return this.range(101).toString() + '%';
+}
+
+var parsePx = function(number) {
+    return Math.floor(number).toString() + "px";
+};
+
+Number.prototype.toPx = function() {
+    return parsePx(this);
+};
+
+CSSStyleDeclaration.prototype.modify = function(obj) {
+    for (key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            this[key] = obj[key];
+        }
+    }
+};
+
+(function(window){
+//
+// event settings
+//
+
+var setBorderHue = function(hue) {
+    var ids = ['container_main'];
+    for (var i = 0; i < ids.length; i++) {
+        byId(ids[i]).style.borderColor = 'hsl(' + hue + ',50%, 80%)';
+    }
+};
+
+var setControlHue = function(hue) {
+    var ids = ['menu', 'menuFile', 'menuEdit', 'menuGate'];
+    for (var i = 0; i < ids.length; i++) {
+        byId(ids[i]).style.backgroundColor = 'hsl(' + hue + ',50%, 80%)';
+    }
+};
+
+var setBackgroundHue = function(hue) {
+    document.body.style.backgroundColor = 'hsl(' + hue + ',15%, 10%)';
+    document.getElementsByTagName('html')[0].style.backgroundColor = 'hsl(' + hue + ',15%, 10%)';
+};
+
+var setPeriphHue = function(hue) {
+    setBorderHue(hue);
+    setControlHue(hue);
+    setBackgroundHue(hue);
+};
+
+APP_VERSION = "map_editor_ver1";
+
+storage = {
+    PREFIX: APP_VERSION + '.',
+
+    get: function(key, defaultValue) {
+        var val = localStorage[this.PREFIX + key];
+        if (val == null) {
+            return defaultValue;
+        }
+        return JSON.parse(val);
+    },
+
+    set: function(key, value){
+        localStorage[this.PREFIX + key] = JSON.stringify(value);
+    },
+}
+
+//
+// home - main object/namespace
+//
+
+var home = {
+    
+    main: function() {
+        this.ms = new action.MS();
+        
+        this.ms.nodeRun();
+        this.ms.nodeReact();
+        this.ms.nodeDraw();
+    },
+};
+
+//
+// action - runnable classes.
+//
+var action = namespace();
+
+/**
+ * Base Node
+ */
+action.BaseRunner  = Object.derive({
+    alive: true,
+    nodeAliveAllFlag: true,
+
+    _nop: function() {
+    },
+
+    _nodePrepare: function() {
+        if (this.children == undefined) {
+            this.children = [];
+        }
+    },
+
+    _setParent: function(parent) {
+        this.parent = parent;
+    },
+
+    nodeClear: function() {
+        this.children = [];
+    },
+
+    nodeAppend: function(obj) {
+        this._nodePrepare();
+        if (obj == null) {
+            return;
+        }
+        obj._setParent(this);
+        this.children.push(obj);
+    },
+
+    nodeExtend: function(args) {
+        if (args == undefined) {
+            this.runnerCheck();
+            return;
+        }
+        if (!Array.prototype.isPrototypeOf(args)) {
+            return;
+        }
+        this._nodePrepare();
+        for (var i = 0; i < args.length; i++) {
+            args[i]._setParent(this);
+            this.children.push(args[i]);
+        }
+    },
+
+    runnerCheck: function() {
+        this._nodePrepare();
+        for (var i in this) {
+            if (this[i] instanceof action.BaseRunner && this.children.indexOf(this[i]) < 0) {
+                this[i]._setParent(this);
+                this.children.push(this[i]);
+            }
+        }
+    },
+
+    nodeAliveAll: function(flag) {
+        if (flag == null) {
+            return this.nodeAliveAllFlag;
+        } else {
+            return this.nodeAliveAllFlag = flag;
+        }
+    },
+
+    nodeAliveCheck: function() {
+        // alive-checking of children array.
+        if (this.children == undefined) {
+            return;
+        }
+        var i = 0;
+        while (true) {
+            if (i >= this.children.length) {
+                return;
+            }
+            if (!this.children[i].alive) {
+                this.children.splice(i, 1);
+            } else {
+                i++;
+            }
+        }
+    },
+
+    _nodeCommand: function(cmd) {
+        if (this.children == undefined) {
+            return;
+        }
+        for (var i = 0; i < this.children.length; i++) {
+            this.children[i][cmd]();
+        }
+    },
+
+    react: function() {
+    },
+
+    nodeReact: function() {
+        if (!this.alive) {
+            return;
+        }
+        if (!this.nodeAliveAll()) {
+            this.nodeAliveCheck();
+            this.nodeAliveAll(1);
+        }
+        this._nodeCommand("nodeReact");
+        this.react();
+    },
+
+    run: function() {
+    },
+
+    nodeRun: function() {
+        if (!this.alive) {
+            return;
+        }
+        this._nodeCommand("nodeRun");
+        this.run();
+    },
+
+    draw: function() {
+    },
+
+    nodeDraw: function(){
+        if (!this.alive) {
+            return;
+        }
+        this._nodeCommand("nodeDraw");
+        this.draw();
+    },
+
+    die: function() {
+        this.alive = false;
+        this._nodeCommand("die");
+        this.react = this._nop;
+        this.run = this._nop;
+        this.draw = this._nop;
+        this.nodeReact = this._nop;
+        this.nodeRun = this._nop;
+        this.nodeDraw = this._nop;
+        this.parent.nodeAliveAll(0);
+        if (this.__hasDom__) {
+            for (var i in this) {
+                var dom = this[i];
+                if (dom instanceof HTMLElement && dom.parentElement != null) {
+                    dom.parentElement.removeChild(dom);
+                }
+            }
+        }
+    },
+
+    nodeDie: function() {
+        this._nodeCommand('die');
+    },
+
+    getName: function() {
+        var buf = '';
+        buf += typeof this.__module__ === "string" ? this.__module__ + ':' : '';
+        buf += this.constructor.prototype.hasOwnProperty("__name__") ? this.__name__ :
+               this.constructor.name !== "" ? this.constructor.name : "anonymous";
+        return buf;
+    },
+
+    /**
+     * dump the node tree as XML.
+     * @param n indent level
+     * @param recCheck list of nodes already checked.
+     * @return XML representaion of node tree.
+     */
+    toXML: function(n, recCheck) {
+        if (n === undefined) {
+            n = 0;
+        }
+        if (recCheck === undefined) {
+            recCheck = [];
+        }
+        var indent = "";
+        for (var i = 0; i < n; i++) {
+            indent += "    ";
+        }
+        if (n > 9) {
+            return indent + "deep!";
+        }
+        var buf = indent;
+        var name = this.getName();
+        buf += "<" + name;
+        if (recCheck.indexOf(this) >= 0) {
+            return buf + " *recursion* />";
+        }
+        //var recCheck_ = recCheck.concat([]);
+        var recCheck_ = recCheck;
+        recCheck_.push(this);
+        var t = [];
+        for (i in this) {
+            if (i === "parent") {
+                // exclude the parent node.
+                continue;
+            }
+            if (this[i] instanceof action.BaseRunner) {
+                t.push(this[i]);
+            }
+        }
+        var s = [];
+        if (this.children !== undefined) {
+            for (i in this.children) {
+                var obj = this.children[i];
+                if (obj instanceof action.BaseRunner && t.indexOf(obj) < 0) {
+                    s.push(obj);
+                }
+            }
+        }
+        t = t.concat(s);
+        if (t.length === 0) {
+            return buf + " />";
+        }
+        buf += ">";
+        for (i = 0; i < t.length; i++ ) {
+            if (i > 20) {
+                buf += "\n" + indent + "    <!--";
+                buf += "\n" + indent + "    other " + (t.length - 20) + " node(s)";
+                buf += "\n" + indent + "    -->";
+                break;
+            }
+            buf += "\n" + t[i].toXML(n + 1, recCheck_);
+        }
+        buf += "\n" + indent + "</" + name + ">";
+        return buf;
+    }
+});
+
+action.LeafRunner = action.BaseRunner.derive({
+    nodeReact: function() {
+        this.react();
+        this.nodeReact = this.react;
+    },
+
+    nodeRun: function() {
+        this.run();
+        this.nodeRun = this.run;
+    },
+
+    nodeDraw: function() {
+        this.draw();
+        this.nodeDraw = this.draw;
+    }
+});
+
+action.Listener = action.BaseRunner.derive({
+    initMQ: function() {
+        this._mqReady = 1;
+        this._mq = new Array(); // the message queue
+        this.listen = this._listen;
+    },
+
+    checkMQ: function() {
+        if (this._mqReady) {
+            return;
+        } else {
+            this.initMQ();
+        }
+    },
+
+    message: function(ms) {
+        this.checkMQ();
+        this._mq.push(ms);
+    },
+
+    listen: function() {
+    },
+
+    _listen: function() {
+        var ms;
+        var handlerFunction;
+        while (ms = this._mq.shift()) {
+            if (handlerFunction = this.Listening[ms.head]) {
+                handlerFunction.call(this, ms);
+            }
+        }
+    },
+
+    Listening: {} // Message handler functions of the object
+});
+
+action.MS = action.Listener.derive({
+    constructor: function() {
+        var self = this;
+
+        this.mapToggle = 0;
+        this.sceneMap = new action.SceneMap(this);
+        this.setMapURL({
+            url: location.hash.replace('#!', '') || "map00.xml",
+        });
+        this.nodeExtend([
+            this.sceneMap,
+        ]);
+
+        this.setupUI();
+    },
+
+    setupUI: function() {
+        var self = this;
+        window.addEventListener('hashchange', function(){
+            home.ms.sceneMap.leave();
+            setTimeout(function() {
+                self.setMapURL({url: location.hash.replace('#!', '') || "map00.xml",});
+            }, 500);
+        });
+    },
+
+    init: function(dto) {
+        this.sceneMap.init();
+    },
+
+    /**
+     * change map URL.
+     * @param dto
+     * @param dto.url (required) url of map data.
+     * @param dto.gate (optional) entering gate.
+     * @param dto.callback (optional) callback for map load completion
+     * @param dto.pt (optional) initial point of Protagonist.
+     */
+    setMapURL: function(dto) {
+        var self = this;
+        this.sceneMap.map = new morph.Map({
+            url: dto.url,
+            gate: dto.gate,
+            callback: function(dto_){
+                self.init(dto_);
+            },
+            pt: dto.pt,
+            ctx: this.sceneMap.ctx,
+        });
+    },
+});
+
+var fileBtnOn = function() {
+    byId('menuFile').style.height = '88px';
+    byId('menuFileBtn').style.modify({
+        color: 'white',
+        backgroundColor: 'black',
+    });
+};
+
+var fileBtnOff = function() {
+    byId('menuFile').style.height = '0px';
+    byId('menuFileBtn').style.modify({
+        color: 'black',
+        backgroundColor: 'transparent',
+    });
+};
+
+var editBtnOn = function() {
+    byId('menuEdit').style.height = '88px';
+    byId('menuEditBtn').style.modify({
+        color: 'white',
+        backgroundColor: 'black',
+    });
+};
+
+var editBtnOff = function() {
+    byId('menuEdit').style.height = '0px';
+    byId('menuEditBtn').style.modify({
+        color: 'black',
+        backgroundColor: 'transparent',
+    });
+};
+
+var gateBtnOn = function() {
+    byId('menuGate').style.height = '88px';
+    byId('menuGateBtn').style.modify({
+        color: 'white',
+        backgroundColor: 'black',
+    });
+};
+
+var gateBtnOff = function() {
+    byId('menuGate').style.height = '0px';
+    byId('menuGateBtn').style.modify({
+        color: 'black',
+        backgroundColor: 'transparent',
+    });
+};
+
+window.fileBtnClick = function(e) {
+    var flg = byId('menuFile').style.height === '0px';
+    console.log('fileBtnClick: flg = ' + flg);
+    if (flg) {
+        fileBtnOn();
+    } else {
+        fileBtnOff();
+    }
+    editBtnOff();
+    gateBtnOff();
+    if (e) {
+        e.stopPropagation();
+    }
+};
+
+window.editBtnClick = function(e) {
+    var flg = byId('menuEdit').style.height === '0px';
+    if (flg) {
+        editBtnOn();
+    } else {
+        editBtnOff();
+    }
+    fileBtnOff();
+    gateBtnOff();
+    if (e) {
+        e.stopPropagation();
+    }
+};
+
+window.gateBtnClick = function(e) {
+    var flg = byId('menuGate').style.height === '0px';
+    if (flg) {
+        gateBtnOn();
+    } else {
+        gateBtnOff();
+    }
+    fileBtnOff();
+    editBtnOff();
+    if (e) {
+        e.stopPropagation();
+    }
+};
+
+action.SceneMap = action.Listener.derive({
+    __hasDom__: 1,
+    __doms__: [],
+    GATE_TOOLTIP_AUTOCLOSE_DUR: 20000,
+
+    constructor: function(env) {
+        var self = this;
+        this.env = env;
+
+        this.dom = byId("container_main");
+        this.canvas_main = byId("canvas_layer_map");
+
+        this.ctx = this.canvas_main.getContext("2d");
+        this.setupUI();
+    },
+
+    setupUI: function() {
+        var self = this;
+
+        this.mapTitle = byId('mapTitle');
+        this.mapTitle.addEventListener('click', function() {
+            var newTitle = prompt('input new title', self.map.title);
+            if (newTitle != null) {
+                self.mapTitle.textContent = self.map.title = newTitle;
+            }
+        });
+
+        var fileBtn = byId('menuFileBtn');
+        fileBtn.addEventListener('click', fileBtnClick);
+        fileBtn.addEventListener('mouseover', function() {
+            fileBtnOn();
+            editBtnOff();
+            gateBtnOff();
+        });
+
+        var editBtn = byId('menuEditBtn');
+        editBtn.addEventListener('click', editBtnClick);
+        editBtn.addEventListener('mouseover', function() {
+            fileBtnOff();
+            editBtnOn();
+            gateBtnOff();
+        });
+
+        var gateBtn = byId('menuGateBtn');
+        gateBtn.addEventListener('click', gateBtnClick);
+        gateBtn.addEventListener('mouseover', function() {
+            fileBtnOff();
+            editBtnOff();
+            gateBtnOn();
+        });
+
+        document.body.addEventListener('click', function() {
+            fileBtnOff();
+            editBtnOff();
+            gateBtnOff();
+        });
+
+        var fileMenu = byId('menuFile');
+        fileMenu.addEventListener('click', function(e) {
+            e.stopPropagation();            
+        });
+
+        var editMenu = byId('menuEdit');
+        editMenu.addEventListener('click', function(e) {
+            e.stopPropagation();            
+        });
+
+        var gateMenu = byId('menuGate');
+        gateMenu.addEventListener('click', function(e) {
+            e.stopPropagation();            
+        });
+    },
+
+    init: function() {
+        var self = this;
+
+        this.canvas_main.width = this.map.width * 16;
+        this.canvas_main.height = this.map.height * 16;
+
+        if (typeof this.canvasClickListener === "function") {
+            this.canvas_main.removeEventListener('click', this.canvasClickListener);
+        }
+
+        this.canvasClickListener = function(e) {
+            console.log('canvas_main: clicked. ' + e.offsetX + ' ' + e.offsetY);
+            var x = Math.floor(e.offsetX / 16);
+            var y = Math.floor(e.offsetY / 16);
+            self.map.getAsset({x: x, y: y}).changeSymbol(storage.get('pensymbol', '0'));
+        };
+
+        this.canvas_main.addEventListener('click', this.canvasClickListener);
+
+        setTimeout(function() {
+            self.canvas_main.style.opacity = 1;
+        }, 500);
+
+        this.dom.style.width = (this.map.width * 16).toPx();
+        this.dom.style.height = (this.map.height * 16).toPx();
+
+        this.map.view.nodeDraw();
+        setPeriphHue(this.map.HUE);
+
+        var gates = this.map.getGates();
+        var exits = this.map.getExits();
+
+        for (var i in gates) {
+            if (gates.hasOwnProperty(i)) {
+                if (i === "__default__") {
+                    continue;
+                }
+                var gate = gates[i];
+                var exit = exits[i];
+                this.putHitDiv(gate, exit);
+            }
+        }
+
+        this.mapTitle.textContent = this.map.title;
+    },
+
+    putHitDiv: function(gate, exit, initialOpen) {
+        var self = this;
+        var hitDiv = document.createElement('div');
+        hitDiv.style.modify({
+            position: "absolute",
+            left: (gate.x * 16) + "px",
+            top: (gate.y * 16) + "px",
+            width: "16px",
+            height: "16px",
+        });
+        var g = gate;
+        var e = exit;
+        var flg = null;
+
+        var mouseoverListener = function(evt) {
+            if (flg) {
+                return;
+            }
+            var div = document.createElement('div');
+            div.style.modify({
+                position: "absolute",
+                left: "" + (hitDiv.offsetLeft + evt.offsetX) + "px",
+                top: "" + (hitDiv.offsetTop + evt.offsetY) + "px" ,
+                _width: "100px",
+                _height: "100px",
+                padding: "10px",
+                fontFamily: "'menlo', 'monaco', 'courier new', monospace",
+                background: "-webkit-linear-gradient(top, rgba(255,255,255,1) 0%,rgba(200,200,200,1) 100%)",
+                borderRadius: "10px",
+                boxShadow: "4px 4px 4px black",
+                opacity: 0.0,
+                webkitTransitionDuration: "500ms",
+            });
+            var createDom = function(tag, text, callback) {
+                var dom = document.createElement(tag);
+                if (text != null) {
+                    dom.innerHTML = text;
+                }
+                if (typeof callback === "function") {
+                    dom.style.modify({
+                        webkitTransitionDuration: "200ms",
+                        borderRadius: "3px",
+                        padding: "3px",
+                        margin: "3px",
+                        color: "black",
+                    });
+                    dom.addEventListener('click', callback);
+                    dom.addEventListener('mouseover', function() {
+                        dom.style.backgroundColor = "black";
+                        dom.style.color = "white";
+                    });
+                    var hoverOut = function() {
+                        dom.style.backgroundColor = "transparent";
+                        dom.style.color = "black";
+                    };
+                    dom.addEventListener('mouseout', hoverOut);
+                    dom.addEventListener('click', hoverOut);
+                }
+                return dom;
+            };
+            var symSpan = createDom('span', '[' + gate.symbol + ']', function() {
+                var gateSymbol = prompt('enter new gate symbol (ex. [A-Z]).', self.map.getAsset(g).symbol);
+                g.symbol = gateSymbol;
+                e.symbol = gateSymbol;
+                self.map.getAsset(g).changeSymbol(g.symbol);
+                symSpan.innerHTML = '['  + g.symbol + ']';
+            });
+            div.appendChild(symSpan);
+            var xySpan = createDom('span', '' + g.x + ',' + g.y, function() {
+                var data = prompt('enter new x,y pair (ex. 12,36).', '' + g.x + ',' + g.y);
+                data = data.split(',');
+                var x = Math.floor(Number(data[0]));
+                var y = Math.floor(Number(data[1]));
+                var newPt = {x: x, y: y};
+                if (self.map.rangeOK(newPt)) {
+                    self.map.getAsset(g).changeSymbol(self.map.getAsset(newPt).symbol);
+                    self.domRemoveOne(hitDiv);
+                    closeDiv();
+
+                    g.x = x;
+                    g.y = y;
+                    self.map.getAsset(g).changeSymbol(g.symbol);
+                    self.putHitDiv(g, e, true);
+                }
+            });
+            div.appendChild(xySpan);
+            var exitDiv = createDom('div', e.url + '#' + e.gate, function() {
+                var newExit = prompt('enter new gate address. (ex. map.xml#gate)', e.url + "#" + e.gate);
+                if (newExit == null) {
+                    return;
+                }
+                x = newExit.split("#", 2);
+                if (x.length === 2) {
+                    e.url = x[0];
+                    e.gate = x[1];
+                    setTimeout(function() {
+                        exitDiv.textContent = e.url + '#' + e.gate;
+                    }, 0);
+                }
+            });
+            div.appendChild(exitDiv);
+            div.appendChild(createDom('span', 'jump', function() {
+                location.hash = "!" + e.url;
+            }));
+            div.appendChild(createDom('span', ' '));
+            var closeDiv = function() {
+                div.style.opacity = 0;
+                setTimeout(function() {
+                    if (div.parentElement != null) {
+                        div.parentElement.removeChild(div);
+                    }
+                }, 500);
+                flg = null;
+            };
+            div.appendChild(createDom('span', 'close', closeDiv));
+            div.appendChild(createDom('span', 'delete', function() {
+                if (confirm('delete gate [' + g.symbol + '] ' + g.x + ',' + g.y)) {
+                    self.map.removeGateExit(gate);
+                    self.map.getAsset(g).changeSymbol('0');
+                    self.domRemoveOne(hitDiv);
+                    closeDiv();
+                }
+            }));
+            self.dom.appendChild(div);
+            self.domPush(div);
+            setTimeout(function() {
+                div.style.modify({
+                    opacity: 0.8
+                });
+            }, 0);
+
+            // after GATE_TOOLTIP_AUTOCLOSE_DUR ms, gate's tooltip
+            // automatically close.
+            setTimeout(closeDiv, self.GATE_TOOLTIP_AUTOCLOSE_DUR);
+            flg = 1;
+        };
+
+        hitDiv.addEventListener("mouseover", mouseoverListener);
+
+        this.dom.appendChild(hitDiv);
+        this.domPush(hitDiv);
+
+        if (initialOpen) {
+            mouseoverListener({
+                offsetX: 8,
+                offsetY: 8
+            });
+        }
+    },
+
+    leave: function() {
+        this.canvas_main.style.opacity = 0;
+        this.domClear();
+    },
+
+    domClear: function() {
+        for (var i = 0; i < this.__doms__.length; i++) {
+            var dom = this.__doms__[i];
+            var parent = dom.parentElement;
+            if (parent != null) {
+                dom.style.opacity = 0;
+                (function() {
+                    var d = dom;
+                    var p = parent;
+                    setTimeout(function() {
+                        p.removeChild(d);
+                    }, 500);
+                })();
+            }
+        }
+        this.__doms__ = [];
+    },
+
+    domRemoveOne: function(dom) {
+        var i = this.__doms__.indexOf(dom);
+        if (i >= 0) {
+            this.__doms__.splice(i, 1);
+        }
+        var parent = dom.parentElement;
+        if (parent != null) {
+            parent.removeChild(dom);
+        }
+    },
+
+    domPush: function(dom) {
+        this.__doms__.push(dom);
+    },
+});
+
+//
+// machine - state machines.
+//
+var machine = namespace();
+
+// List Node
+machine.List = action.BaseRunner.derive({
+    constructor: function() {},
+
+    bulkMessage: function(ms) {
+        for (var i in this.children) {
+            if (typeof this.children[i].message === "function") {
+                this.children[i].message(ms);
+            }
+        }
+    },
+
+    clear: function() {
+        this.empty();
+    },
+
+    empty: function() {
+        this.nodeDie();
+    },
+});
+
+/**
+ *
+ * @param dto
+ * @@ dto.ctx canvas context to write
+ * @@ dto.x left of the box
+ * @@ dto.y top of the box
+ * @@ dto.size size of the box
+ * @@ dto.color color of the box
+ * @@ dto.frame frame width of the box
+ * @@ dto.clear if clear the region of box before rendering
+ */
+machine.Box = action.LeafRunner.derive({
+    constructor: function Box(dto) {
+        this.ctx = dto.ctx;
+        this.x = dto.x;
+        this.y = dto.y;
+        this.color = dto.color || "white";
+        this.size = dto.size;
+        this.frame = typeof dto.frame === "number" ? dto.frame : 0;
+        this.clear = dto.clear;
+    },
+
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.fillRect(
+            this.x + this.frame,
+            this.y + this.frame,
+            this.size - this.frame * 2,
+            this.size - this.frame * 2
+        );
+    }
+});
+
+machine.ClearBox = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+    }
+})
+
+machine.BogoBox = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.fillRect(
+            this.x + this.frame,
+            this.y + this.frame,
+            this.size - this.frame * 2,
+            this.size - this.frame * 2
+        );
+        var z = 2;
+        var x0 = this.x + this.frame + Math.random.range(z),
+            y0 = this.y + this.frame + Math.random.range(z),
+            x1 = this.x + this.frame + Math.random.range(z);
+            y1 = this.y + this.size - this.frame + Math.random.range(z),
+            x2 = this.x + this.size - this.frame + Math.random.range(z),
+            y2 = this.y + this.size - this.frame + Math.random.range(z),
+            x3 = this.x + this.size - this.frame + Math.random.range(z),
+            y3 = this.y + this.frame + Math.random.range(z);
+        this.ctx.moveTo(x0, y0);
+        this.ctx.lineTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.lineTo(x3, y3);
+        this.ctx.lineTo(x0, y0);
+        this.ctx.fill();
+    }
+});
+
+machine.BogoFrame = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.strokeStyle = this.color.toString();
+        this.ctx.beginPath();
+        var z = 2;
+        var x0 = this.x + this.frame + Math.random.range(z),
+            y0 = this.y + this.frame + Math.random.range(z),
+            x1 = this.x + this.frame + Math.random.range(z);
+            y1 = this.y + this.size - this.frame + Math.random.range(z),
+            x2 = this.x + this.size - this.frame + Math.random.range(z),
+            y2 = this.y + this.size - this.frame + Math.random.range(z),
+            x3 = this.x + this.size - this.frame + Math.random.range(z),
+            y3 = this.y + this.frame + Math.random.range(z);
+        this.ctx.moveTo(x0, y0);
+        this.ctx.lineTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.lineTo(x3, y3);
+        this.ctx.lineTo(x0, y0);
+        this.ctx.stroke();
+    }
+});
+
+machine.BozoBox = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.strokeStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.fillRect(
+            this.x + this.frame,
+            this.y + this.frame,
+            this.size - this.frame * 2,
+            this.size - this.frame * 2
+        );
+        var z = 2;
+        var x0 = this.x + this.frame + Math.random.range(z),
+            y0 = this.y + this.frame + Math.random.range(z),
+            x1 = this.x + this.frame + Math.random.range(z);
+            y1 = this.y + this.size - this.frame + Math.random.range(z),
+            x2 = this.x + this.size - this.frame + Math.random.range(z),
+            y2 = this.y + this.size - this.frame + Math.random.range(z),
+            x3 = this.x + this.size - this.frame + Math.random.range(z),
+            y3 = this.y + this.frame + Math.random.range(z);
+        this.ctx.moveTo(x0, y0);
+        this.ctx.lineTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.lineTo(x3, y3);
+        this.ctx.lineTo(x0, y0);
+        this.ctx.stroke();
+    }
+});
+
+machine.Disk = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.arc(this.x + 8, this.y + 8, 8 - this.frame, 0, Math.PI * 2);
+        this.ctx.fill();
+    }
+});
+
+machine.Circle = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.strokeStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.arc(this.x + 8, this.y + 8, 8 - this.frame, 0, Math.PI * 2);
+        this.ctx.stroke();
+    }
+});
+
+machine.Annulus = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.beginPath();
+        this.ctx.globalCompositeOperation = "source-over";
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.arc(this.x + 8, this.y + 8, 8, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.globalCompositeOperation = "copy";
+        this.ctx.beginPath();
+        this.ctx.fillStyle = "hsla(0,0%,0%,0)";
+        this.ctx.arc(this.x + 8, this.y + 8, 4, 0, Math.PI * 2);
+        this.ctx.fill();
+    }
+});
+
+machine.Wheel = machine.Box.derive({
+    ROT_BASE: Math.PI / -2,
+    ROT: 0,
+    DIV: 8,
+
+    drawOne: function() {
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.arc(0, 0, 8, - Math.PI / this.DIV, Math.PI / this.DIV);
+        this.ctx.lineTo(0, 0);
+        this.ctx.stroke();
+    },
+
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.strokeStyle = this.color.toString();
+
+        this.ctx.save();
+        this.ctx.translate(this.x + 8, this.y + 8);
+
+        this.ctx.rotate(this.ROT_BASE + this.ROT);
+
+        for (var i = 0; i < this.DIV; i++) {
+            this.drawOne();
+            this.ctx.rotate(Math.PI * 2 / this.DIV);
+        }
+
+        this.ctx.restore();
+    }
+});
+
+machine.Wheel8 = machine.Wheel;
+machine.Wheel7 = machine.Wheel.derive({DIV: 7});
+machine.Wheel6 = machine.Wheel.derive({DIV: 6});
+machine.Wheel5 = machine.Wheel.derive({DIV: 5});
+machine.Wheel4 = machine.Wheel.derive({DIV: 4});
+machine.Wheel3 = machine.Wheel.derive({DIV: 3});
+machine.Wheel2 = machine.Wheel.derive({DIV: 2});
+
+machine.Radiant = machine.Wheel.derive({
+    DIV: 4,
+
+    drawOne: function() {
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(8, 0);
+        this.ctx.stroke();
+    }
+});
+
+machine.Radiant8 = machine.Radiant.derive({DIV: 8});
+machine.Radiant7 = machine.Radiant.derive({DIV: 7});
+machine.Radiant6 = machine.Radiant.derive({DIV: 6});
+machine.Radiant5 = machine.Radiant.derive({DIV: 5});
+machine.Radiant4 = machine.Radiant;
+machine.Radiant4X = machine.Radiant.derive({ROT: Math.PI / 4});
+machine.Radiant3 = machine.Radiant.derive({DIV: 3});
+machine.Radiant3Y = machine.Radiant.derive({DIV: 3, ROT: Math.PI / 3});
+machine.Radiant2 = machine.Radiant.derive({DIV: 2});
+machine.Radiant2_ = machine.Radiant.derive({DIV: 2, ROT: Math.PI / 2});
+
+machine.Cross = machine.Wheel.derive({
+    DIV: 4,
+
+    drawOne: function() {
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.arc(0, 0, 8 - this.frame, - Math.PI / 2 / (this.DIV + 1), Math.PI / 2 / (this.DIV + 1));
+        this.ctx.fill();
+    }
+});
+
+machine.Cross5 = machine.Cross.derive({DIV: 5});
+machine.Cross4 = machine.Cross;
+machine.Cross3 = machine.Cross.derive({DIV: 3});
+machine.Cross2 = machine.Cross.derive({DIV: 2});
+machine.Cross1 = machine.Cross.derive({DIV: 1});
+
+machine.Windmill = machine.Wheel.derive({
+    DIV: 8,
+
+    drawOne: function() {
+        //this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(4, -1);
+        this.ctx.lineTo(8, (8 - this.DIV) / 2) ;
+        this.ctx.stroke();
+    },
+});
+
+machine.Windmill8 = machine.Windmill;
+machine.Windmill7 = machine.Windmill.derive({DIV: 7});
+machine.Windmill6 = machine.Windmill.derive({DIV: 6});
+machine.Windmill5 = machine.Windmill.derive({DIV: 5});
+machine.Windmill4 = machine.Windmill.derive({DIV: 4});
+machine.Windmill3 = machine.Windmill.derive({DIV: 3});
+machine.Windmill2 = machine.Windmill.derive({DIV: 2});
+
+machine.Polygon = machine.Wheel.derive({
+    DIV: 6,
+    ROT: Math.PI / 2,
+    R: 6.5,
+    D: 4,
+
+    drawOne: function() {
+        var x = this.D;
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.R, -x);
+        this.ctx.lineTo(this.R, x);
+        this.ctx.stroke();
+    },
+});
+
+machine.Polygon6 = machine.Polygon;
+machine.Polygon5 = machine.Polygon.derive({DIV: 5, R: 6, D: 4.5, ROT: Math.PI});
+machine.Polygon4 = machine.Polygon.derive({DIV: 4, R: 6.5, D: 7});
+machine.Polygon3 = machine.Polygon.derive({DIV: 3, R: 3.5, D: 6.5, ROT: 0});
+machine.Polygon3Y = machine.Polygon.derive({DIV: 3, R: 3.5, D: 6.5, ROT: Math.PI});
+
+machine.Seal = machine.Wheel.derive({
+    DIV: 8,
+
+    drawOne: function() {
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(7, 2);
+        this.ctx.lineTo(7, -2);
+        this.ctx.lineTo(4, 1);
+        this.ctx.lineTo(4, -1);
+        this.ctx.lineTo(0, 0);
+        this.ctx.fill();
+    },
+});
+
+//
+// morph - shape or value complex which represents something
+//
+var morph = namespace();
+
+morph.Map = action.Listener.derive({
+    constructor: function(dto) {
+        this.height = 0;
+        this.width = 0;
+        this._data = new Array();
+        this.ctx = dto.ctx;
+        if (typeof dto === "object") {
+            this.init(dto);
+        }
+    },
+
+    init: function(dto) {
+        if (typeof dto.textarea === "string") {
+            this.loadFromTextarea(dto.textarea);
+        } else if (typeof dto.string === "string") {
+            this.parseMapText(dto.string);
+        } else if (typeof dto.url == "string") {
+            this.loadFromURL(dto.url, dto.gate, dto.callback, dto.pt);
+        }
+    },
+
+    parseMapText: function(mapText) {
+        this.mobs = [];
+        this.HUE = Math.random.range(360);
+        this.HUE_DEVIATION = Math.random.range(5);
+        this.COUNTER_HUE = this.HUE + 180 + Math.random.range(61) - 30;
+
+        if (230 < this.COUNTER_HUE && this.COUNTER_HUE < 280) {
+            // I don't like pure blue.
+            this.COUNTER_HUE -= 60;
+        }
+
+        this.TILE_SATURATION = Math.random.range(70) + 30;
+
+        var div = document.createElement("div");
+        div.innerHTML = mapText;
+
+        // map chip information
+        map = div.getElementsByTagName('row');
+
+        var title;
+        if (title = div.getElementsByTagName('title')[0]) {
+            this.title = title.textContent;
+        }
+
+        // tile information
+        this.tiles = div.getElementsByTagName('tiles')[0];
+
+        // entry points infromation
+        this.enter = div.getElementsByTagName('enter')[0];
+        this.parseGate();
+
+        // exits information
+        this.exit = div.getElementsByTagName('exit')[0];
+        this.parseExits();
+
+        // set height and width of the map.
+        this.height = map.length;
+        this.width = 0;
+        this._data = [];
+        var i;
+        for (i = 0; i < map.length; i++) {
+            this._data[i] = map[i].innerHTML;
+            this.width = Math.max(this.width, map[i].innerHTML.length)
+        }
+
+        // build assets information
+        var assets = [];
+        var view = new machine.List();
+        for (i = 0; i < map.length; i++) {
+            var row = map[i].textContent;
+            var ar = [];
+            var j;
+            for (j = 0; j < row.length; j++) {
+                var c = row.charAt(j);
+                if (/[A-Z]/.test(c)) {
+                    this.mobs.push({x: j, y: i, symbol: c})
+                }
+                var asset = new morph.Asset({
+                    symbol: c,
+                    x: j,
+                    y: i,
+                    map: this,
+                });
+                ar.push(asset);
+                view.nodeAppend(asset);
+            }
+            assets.push(ar);
+        }
+        this.assets = assets;
+        this.view = view;
+    },
+
+    loadFromTextarea: function(textareaId) {
+        var map = document.getElementById(textareaId);
+        var mapText = map.textContent;
+        this.parseMapText(mapText);
+    },
+
+    loadFromURL: function(url, gate, callback, pt) {
+        var self = this;
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.onreadystatechange = function() {
+            if (this.readyState == 4) {
+                self.parseMapText(this.responseText)
+                typeof callback === "function" && callback.apply(undefined, [{
+                    title: self.title || url,
+                    pt: gate == null && pt != null ? pt : self.gate(gate)
+                }]);
+            }
+        };
+        xhr.send(null);
+    },
+
+    getMapText: function() {
+        var div = document.createElement('div');
+        var map = document.createElement('map');
+        for (var i = 0; i < this.height; i++) {
+            var row = document.createElement('row');
+            row.innerHTML = this._data[i];
+            map.appendChild(document.createTextNode('\n  '));
+            map.appendChild(row);
+        }
+        map.appendChild(document.createTextNode('\n'));
+        div.appendChild(map);
+        return div.innerHTML;
+    },
+
+    getMobs: function() {
+        return this.mobs;
+    },
+
+    rangeOK: function(pt) {
+        var x = Number(pt.x),
+            y = Number(pt.y);
+        return 0 <= x && x < this.width && 0 <= y && y < this.height;
+    },
+
+    gate: function(label) {
+        if (label == null) {
+            return this._gates.__default__;
+        }
+        return this._gates[label];
+    },
+
+    getGates: function() {
+        return this._gates;
+    },
+
+    addGateExit: function(x, y, symbol, url, gateSym) {
+        var gate = this.addGate(x, y, symbol);
+        var exit = this.addExit(url, gateSym, symbol);
+        return {gate: gate, exit: exit};
+    },
+
+    addGate: function(x, y, symbol) {
+        var newGate = {x: x, y: y, symbol: symbol}
+        this._gates[symbol] = newGate;
+        return newGate;
+    },
+
+    addExit: function(url, gate, symbol) {
+        var newExit = {url: url, gate: gate, symbol: symbol}
+        this._exits[symbol] = newExit;
+        return newExit;
+    },
+
+    removeGateExit: function(gate) {
+        console.log(gate);
+        this.removeGate(gate);
+        this.removeExit(gate);
+    },
+
+    removeGate: function(gate) {
+        delete this._gates[gate.symbol];
+    },
+
+    removeExit: function(gate) {
+        delete this._exits[gate.symbol];
+    },
+
+    getExits: function() {
+        return this._exits;
+    },
+
+    parseGate: function() {
+        var gates = this.enter.getElementsByTagName('gate');
+        this._gates = {};
+        for (var i = 0; i < gates.length; i++) {
+            var gate = gates[i];
+            var label = gate.getAttribute('name');
+            this._gates[label] = this.parseGateOne(gate);
+            if (i == 0) {
+                this._gates.__default__ = this._gates[label];
+            }
+        }
+    },
+
+    parseExits: function() {
+        var gates = this.exit.getElementsByTagName('gate');
+        this._exits = {};
+        for (var i = 0; i < gates.length; i++) {
+            var gate = gates[i];
+            var label = gate.getAttribute('name');
+            this._exits[label] = this.parseExitOne(gate);
+        }
+    },
+
+    parseGateOne: function(gate) {
+        var x = Number(gate.getAttribute('x'));
+        x = x === NaN ? 0 : x;
+        var y = Number(gate.getAttribute('y'));
+        y = y === NaN ? 0 : y;
+        var sym = gate.getAttribute('name');
+        return {x: x, y: y, symbol: sym};
+    },
+
+    parseExitOne: function(gate) {
+        var href = gate.getAttribute('href');
+        var x = href.split('#', 2);
+        var sym = gate.getAttribute('name');
+        return {url: x[0], gate: x[1], symbol: sym};
+    },
+
+    passable: function(pt) {
+        return this.rangeOK(pt) && this._data[pt.y][pt.x] !== '1';
+    },
+
+    onEnter: function(pt) {
+        if (!this.rangeOK(pt)) {
+            return undefined;
+        }
+        var chr = this._data[pt.y][pt.x];
+        var exits = this.exit.getElementsByTagName('gate');
+        for (var i = 0; i < exits.length; i++) {
+            var exit = exits[i];
+            if (exit.getAttribute('name') === chr) {
+                x = exit.getAttribute('href').split('#', 2);
+                return {url: x[0], gate: x[1]};
+            }
+        }
+        return undefined;
+    },
+
+    getAsset: function(pt) {
+        if (!this.rangeOK(pt)) {
+            return undefined;
+        }
+        var asset = this.assets[pt.y][pt.x];
+        return asset;
+    },
+
+    gateSymbolDefined: function(gateSym) {
+        return this._gateSymbols.indexOf(gateSym) >= 0;
+    },
+
+    validGateSymbol: function(gateSym) {
+        return /^[A-Z]$/.test(gateSym);
+    },
+    
+    toXML: function() {
+        var xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<mapml>\n';
+
+        if (this.title != null) {
+            xml += "  <title>" + this.title + "</title>\n"
+        } else {
+            xml += "  <title></title>\n"
+        }
+
+        // gates (enter)
+        xml += "  <enter>\n";
+        for (var key in this._gates) {
+            if (this._gates.hasOwnProperty(key)) {
+                if (key === '__default__') {
+                    continue;
+                }
+                var gate = this._gates[key];
+                xml += '    <gate name="' + gate.symbol + '" x="' + gate.x + '" y="' + gate.y + '" />\n';
+            }
+        }
+        xml += "  </enter>\n";
+
+        // exits
+        xml += "  <exit>\n";
+        for (var key in this._exits) {
+            if (this._exits.hasOwnProperty(key)) {
+                var gate = this._exits[key];
+                xml += '    <gate name="' + gate.symbol + '" href="' + gate.url + '#' + gate.gate + '" />\n';
+            }
+        }
+        xml += "  </exit>\n";
+
+        // map data
+        for (var i = 0; i < this.height; i++) {
+            var row = 
+            xml += "  <row>";
+            for (var j = 0; j < this.width; j++) {
+                var asset = this.assets[i][j];
+                if (asset == null) {
+                    console.log('short row at ' + i);
+                    continue;
+                }
+                xml += asset.symbol;
+            }
+            xml += "</row>\n";
+        }
+        xml += "</mapml>\n"
+        return xml;
+    },
+});
+
+morph.Asset = action.Listener.derive({
+    GRID_SIZE: 16,
+
+    constructor: function(dto) {
+        this.x = dto.x;
+        this.y = dto.y;
+        this.symbol = dto.symbol;
+        this.ctx = dto.map.ctx;
+        this.map = dto.map;
+        this.init();
+    },
+
+    init: function() {
+        this.passable = !/1/.test(this.symbol)
+        this.initView();
+    },
+
+    initView: function() {
+        var x = this.x,
+            y = this.y,
+            GRID_SIZE = this.GRID_SIZE;
+
+        var HUE = this.map.HUE;
+        var COUNTER_HUE = this.map.COUNTER_HUE;
+        var HUE_DEVIATION = this.map.HUE_DEVIATION;
+        var TILE_SATURATION = this.map.TILE_SATURATION;
+
+        var colorSymbol = "hsla(" + (COUNTER_HUE + Math.random.range(31) - 15) + ",100%,45%,1)";
+        var colorWall = "hsla(" + HUE + ",50%,80%,1)";
+        var colorFloor = (
+            "hsla("
+            + (HUE + Math.random.range(HUE_DEVIATION * 2 + 1) - HUE_DEVIATION) + ","
+            + TILE_SATURATION + "%,"
+            + (Math.random.range(60) + 20) + "%,"
+            + "0.45)"
+        );
+
+        var disk = new machine.Disk({
+            ctx: this.ctx,
+            x: x * GRID_SIZE,
+            y: y * GRID_SIZE,
+            size: GRID_SIZE,
+            color: colorSymbol,
+            frame: 4,
+            clear: true
+        });
+
+        var circle = new machine.Circle({
+            ctx: this.ctx,
+            x: x * GRID_SIZE,
+            y: y * GRID_SIZE,
+            size: GRID_SIZE,
+            color: colorSymbol,
+            frame: 0.5,
+            clear: false
+        });
+
+        var box = new machine.Box({
+            ctx: this.ctx,
+            x: x * GRID_SIZE,
+            y: y * GRID_SIZE,
+            size: GRID_SIZE,
+            color: colorSymbol,
+            frame: 5,
+            clear: true
+        });
+
+        var clear = new machine.ClearBox({
+            ctx: this.ctx,
+            x: x * GRID_SIZE,
+            y: y * GRID_SIZE,
+            size: GRID_SIZE,
+            color: colorFloor,
+            frame: 0,
+            clear: true
+        });
+
+        this.nodeClear();
+
+        var defaultOptions = {
+            ctx: this.ctx,
+            x: x * GRID_SIZE,
+            y: y * GRID_SIZE,
+            size: GRID_SIZE,
+            color: colorSymbol,
+            frame: 0,
+            clear: false
+        }
+
+        if (this.symbol == "1") {
+            this.nodeAppend(new machine.BogoBox({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorWall,
+                frame: 1,
+                clear: true
+            }));
+        } else if (this.symbol == "0") {
+            this.nodeAppend(new machine.BogoBox({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorFloor,
+                frame: Math.random.choice([2,3,4]),
+                clear: true
+            }));
+        } else if (/[A-Z]/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Circle({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 1,
+                clear: false
+            }));
+        } else if (/a/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill2(defaultOptions));
+        } else if (/b/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill3(defaultOptions));
+        } else if (/c/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill4(defaultOptions));
+        } else if (/d/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Radiant3Y(defaultOptions));
+        } else if (/e/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Radiant3Y(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/f/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Radiant4(defaultOptions));
+        } else if (/g/.test(this.symbol)) {
+            this.nodeAppend(clear);
+            this.nodeAppend(new machine.Radiant3Y(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/h/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill2(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/i/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Radiant2_(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/j/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Radiant5(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/k/.test(this.symbol)) {
+            this.nodeAppend(clear);
+            this.nodeAppend(new machine.Polygon3(defaultOptions));
+            this.nodeAppend(new machine.Polygon3Y(defaultOptions));
+        } else if (/l/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(new machine.Polygon6(defaultOptions));
+        } else if (/m/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill7(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/n/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(circle);
+        } else if (/o/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(new machine.Windmill2(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/p/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(new machine.Windmill4(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/q/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Polygon4(defaultOptions));
+        } else if (/r/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(new machine.Radiant4X(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/s/.test(this.symbol)) {
+            this.nodeAppend(clear);
+            this.nodeAppend(new machine.Cross2(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/t/.test(this.symbol)) {
+            this.nodeAppend(clear);
+            this.nodeAppend(new machine.Cross3(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/u/.test(this.symbol)) {
+            this.nodeAppend(clear);
+            this.nodeAppend(new machine.Cross4(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/v/.test(this.symbol)) {
+            this.nodeAppend(clear);
+            this.nodeAppend(new machine.Cross5(defaultOptions));
+            this.nodeAppend(circle);
+        } else if (/w/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Cross2(defaultOptions));
+        } else if (/x/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Cross3(defaultOptions));
+        } else if (/y/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Cross4(defaultOptions));
+        } else if (/z/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Cross5(defaultOptions));
+        } else if (/\./.test(this.symbol)) {
+            this.nodeAppend(clear);
+        }
+    },
+
+    changeSymbol: function(symbol) {
+        this.symbol = symbol;
+        this.init();
+        this.nodeDraw();
+    },
+});
+
+//
+// color - moving points in RGB-color spaces or HSL-color spaces.
+//
+var color = namespace();
+
+color.RGB = action.BaseRunner.derive({
+    constructor: function RGB() {
+        this.r = args.r;
+        this.g = args.g;
+        this.b = args.b;
+        this.runnerCheck();
+    },
+    
+    toString: function() {
+        return (
+            "#"
+            + this.r.value
+            + this.g.value
+            + this.b.value
+        );
+    }
+});
+
+color.HSL = action.BaseRunner.derive({
+    constructor: function HSL(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+        this.runnerCheck();
+    },
+    
+    toString: function() {
+        return (
+            "hsl("
+            + this.h.value + ","
+            + this.s.value + "%,"
+            + this.l.value + "%)"
+        );
+    }
+});
+
+color.HSLA = action.BaseRunner.derive({
+    constructor: function HSLA(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+        this.a = args.a;
+        this.runnerCheck();
+    },
+        
+    toString: function() {
+        return (
+            "hsla("
+            + this.h.value + ","
+            + this.s.value + "%,"
+            + this.l.value + "%,"
+            + this.a.value + ")"
+        );
+    }
+});
+
+color.Const = action.BaseRunner.derive({
+    constructor: function Const(color) {
+        this.color = color;
+    },
+    
+    toString: function() {
+        return this.color.toString();
+    }
+});
+
+//
+// value - running 1-dimensional quantities.
+//
+var value = namespace();
+
+value.Runnable = action.LeafRunner.derive({
+    __name__: "Runnable",
+    value: 0,
+    prevValue: null,
+    prevPrevValue: null,
+    
+    run: function() {
+        this.prevPrevValue = this.prevValue;
+        this.prevValue = this.value;
+        this.calcValue();
+        if (this._shift && typeof this._shift.run === "function") {
+            this._shift.run();
+            this.value += this._shift.value;
+        }
+    },
+    
+    calcValue: function() {
+    },
+
+    isFlat: function() {
+        return this.prevValue === this.value;
+    },
+
+    onFlat: function() {
+        return this.prevValue === this.value && this.prevValue !== this.prevPrevValue;
+    },
+
+    isChanging: function() {
+        return this.prevValue !== this.value;
+    },
+
+    onPhaseChange: function() {
+        return false;
+    },
+    
+    shift: function(runnable) {
+        if (typeof runnable === "number") {
+            runnable = new value.Const(runnable);
+        }
+        runnable._shift = this;
+        return runnable;
+    }
+});
+
+value.Integral = value.Runnable.derive({
+    constructor: function Integral(obj, initial) {
+        this.obj = obj;
+        this.baseValue = initial || 0;
+    },
+    
+    calcValue: function() {
+        this.obj.run();
+        this.baseValue = this.baseValue + this.obj.value;
+        this.value = this.baseValue;
+    }
+});
+
+value.Const = value.Runnable.derive({
+    constructor: function Const(value) {
+        this.baseValue = value;
+        this.prevValue = null;
+    },
+    
+    calcValue: function() {
+        this.value = this.baseValue;
+    }
+});
+
+// tracking values, and loops
+value.Track = value.Runnable.derive({
+    constructor: function Track(array) { // ([[0, 50], [50]])
+        this.init(array);
+    },
+
+    init: function(array) {
+        if (typeof array === "undefined") {
+            array = [[0]];
+        } else if (typeof array == "number") {
+            array = [[array]];
+        }
+        this.values = array;
+        this.k = 0;
+        this.i = 0;
+        this.speed = null;
+        this.prevSpeed = null;
+        this._setNext();
+        this.value = this.ground;
+    },
+    
+    _setNext: function() {
+        this.pair = this.values[this.k];
+        this.ground = this.pair[0];
+        this.duration = this.pair[1] || Infinity;
+        this.callback = this.pair[2];
+        this.k = (this.k + 1) % this.values.length;
+        this.nextPair = this.values[this.k];
+        this.nextValue = this.nextPair[0];
+        this.prevSpeed = this.speed;
+        this.speed = (this.nextValue - this.ground) / this.duration;
+    },
+
+    onPhaseChange: function() {
+        return this.prevSpeed !== null && this.i === 0; // exclude before first run case
+    },
+                
+    onPhaseChange2: function() {
+        return this.i === 0;
+    },
+                
+    calcValue: function() {
+        this.i += 1;
+        if (this.i >= this.duration) {
+            if (typeof this.callback === "function") {
+                this.callback.call();
+            }
+            this.i = 0;
+            this._setNext();
+        }
+        this.baseValue = this.i * this.speed + this.ground;
+        this.value = this.baseValue;
+    }
+    
+});
+
+
+// base class for wave-like values
+value.Wave = value.Runnable.derive(function(__super__) {
+    return {
+        constructor: function Wave(period, amplitude, initial) {
+            this.i = initial ? initial % period : 0;
+            this.period = period || 60;
+            this.amplitude = amplitude || 1;
+        },
+
+        onPhaseChange: function() {
+            return this.i === 0;
+        },
+        
+        run: function() {
+            this.i = (this.i + 1) % this.period
+            __super__.run.apply(this);
+        }
+    }
+});
+
+value.TriangleWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function TriangleWave() {
+            __super__.constructor.apply(this, arguments);
+            this.speed = this.amplitude * 4 / this.period;
+            this.calcValue();
+        },
+        
+        calcValue: function() {
+            if (this.i < this.period / 4) {
+                this.value = this.i * this.speed;
+            } else if (this.period / 4 <= this.i && this.i < this.period * 3 / 4) {
+                this.value = this.amplitude * 2 - this.i * this.speed;
+            } else {
+                this.value = -4 * this.amplitude + this.speed * this.i;
+            }
+        }
+    };
+});
+
+value.SineWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function SineWave(period, amplitude, initial) {
+            __super__.constructor.call(this, period, amplitude, initial);
+            this.freq = 2 * Math.PI / this.period;
+            this.calcValue();
+        },
+        
+        calcValue: function() {
+            return this.value = this.amplitude * Math.sin(this.freq * this.i);
+        }
+    };
+});
+
+value.SineWaveAbs = value.SineWave.derive(function(__super__) {
+    return {
+        __name__: "SineWaveAbs",
+
+        calcValue: function() {
+            return this.value = Math.abs(__super__.calcValue.call(this));
+        }
+    };
+});
+
+value.RandomWalk = value.Runnable.derive({
+    constructor: function RandomWalk(initial) {
+        this.baseValue = initial || 0;
+    },
+    
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() > 0.5 ? 1 : -1);
+        return this.value = this.baseValue;
+    }
+});
+
+value.BrownianMotion = value.Runnable.derive({
+    constructor: function RrownianMotion(initial, scale) {
+        this.baseValue = initial || 0;
+        this.scale = scale || 1;
+    },
+
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() * 2 - 1) * this.scale;
+        this.value = this.baseValue;
+    }
+});
+
+value.CenteredBrownianMotion = value.Runnable.derive({
+    constructor: function CenterdBrownianMotion(initial, scale, k) {
+        this.initial = initial || 0;
+        this.baseValue = initial || 0;
+        this.scale = scale || 1;
+        this.k = k || 0.01
+    },
+
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() * 2 - 1) * this.scale;
+        this.baseValue -= (this.baseValue - this.initial) * this.k;
+        this.value = this.baseValue;
+    }
+});
+
+//
+// point - running 2-dimensional points.
+//
+var point = namespace();
+
+point.RandomWalk = action.LeafRunner.derive({
+    constructor: function RandomWalk(x, y) {
+        this.x = x;
+        this.y = y;
+    },
+    
+    run: function() {
+        this.calcValue();
+    },
+    
+    calcValue: function() {
+        if (Math.random() > 0.5) {
+            this.x += Math.random() > 0.5 ? 1 : -1;
+        } else {
+            this.y += Math.random() > 0.5 ? 1 : -1;
+        }
+    }
+});
+
+window.home = home;
+window.action = action;
+window.machine = machine;
+window.morph = morph;
+window.color = color;
+window.value = value;
+window.point = point;
+namespaced();
+
+var overlayTextarea = function(text) {
+    var ta = document.createElement('textarea');
+    var ts = ta.style;
+    ta.textContent = text;
+    ts.modify({
+        marginTop: "80px",
+        display: "inline-block",
+        width: "80%",
+        height: "70%",
+        fontFamily: "'menlo','monaco',monospace",
+        fontSize: "normal",
+        color: "white",
+        backgroundColor: "black",
+        border: "solid 0px white",
+        outline: "none",
+        overflow: "visible",
+    });
+    var div = document.createElement('div');
+    div.id = "overlay";
+    var ds = div.style;
+    ds.modify({
+        position: "absolute",
+        top: "0px",
+        left: "0px",
+        width: "" + document.width + "px",
+        height: "" + document.height + "px",
+        backgroundColor: "black",
+        opacity: "0",
+        display: "inline-block",
+        textAlign: "center",
+        webkitTransition: "0.5s",
+    });
+    div.appendChild(ta);
+    var clear = function() {
+        ds.opacity = "0";
+        arguments.callee.called = 1;
+        setTimeout(function() {
+            if (div.parentElement === document.body) {
+                document.body.removeChild(div);
+            }
+        }, 500);
+    };
+    div.addEventListener('click', clear);
+    ta.addEventListener('click', function(e) {
+        e.stopPropagation();
+    })
+    document.body.appendChild(div);
+
+    setTimeout(function() {
+        div.style.opacity = "0.9";
+
+        // focus & select textarea
+        ta.focus();
+        ta.select();
+    }, 0);
+    return clear;
+}
+
+var keyPressed = [];
+
+var keyFunc = function(keyCode, e) {
+    // Alt + Something
+    if (keyPressed[18]) {
+        switch(keyCode) {
+            case 65: // A
+                var res = showXML();
+                if (res) {
+                    e.preventDefault()
+                }
+                break;
+            case 69: // E
+                editBtnClick();
+                break;
+            case 70: // F
+                fileBtnClick();
+                break;
+            case 88:
+                promptNewGate();
+                break;
+            case 90: // Z
+                promptPenSymbol();
+                break;
+            default:
+                break;
+        }
+    }
+};
+
+window.showXML = function(isClear) {
+    if (arguments.callee.overlayClear != null && !arguments.callee.overlayClear.called) {
+        arguments.callee.overlayClear();
+        arguments.callee.overlayClear = null;
+        return true;
+    } else {
+        //console.log('showXML: false: ' + (typeof arguments.callee.overlayClear));
+        arguments.callee.overlayClear = overlayTextarea(home.ms.sceneMap.map.toXML());
+    }
+};
+
+window.promptPenSymbol = function() {
+    var newSymbol = prompt('pensymbol is ', storage.get('pensymbol', '0'));
+    if (newSymbol != null && newSymbol !== '') {
+        storage.set('pensymbol', newSymbol);    
+    }
+};
+
+window.promptNewGate = function() {
+    var map = home.ms.sceneMap.map;
+    while (true) {
+        var symbol = prompt('enter a new gate symbol (ex. [A-Z]).');
+
+        if (/[A-Z]/.test(symbol)) {
+            break;
+        }
+        alert('symbol should be A-Z.');
+        var yes = confirm('continue creating new gate?');
+        if (!yes) {
+            return;
+        }
+    }
+    while (true) {
+        var xy = prompt('enter a new x, y pair (ex. 10,10).');
+        if (xy == null) {
+            alert('enter a pair of numbers.');
+            continue;
+        }
+        xy = xy.split(',');
+        var x = Number(xy[0]);
+        var y = Number(xy[1]);
+        if (map.rangeOK({x: x, y: y})) {
+            break;
+        }
+        alert('x,y should be a pair of numbers\nand 0 <= x <= ' + (map.width - 1) + '\nand 0 <= y <= ' + (map.height - 1));
+        var yes = confirm('continue creating new gate?');
+        if (!yes) {
+            return;
+        }
+    }
+    var g = home.ms.sceneMap.map.addGateExit(x, y, symbol, 'map.xml', 'X');
+    home.ms.sceneMap.map.getAsset(g.gate).changeSymbol(g.gate.symbol);
+    home.ms.sceneMap.putHitDiv(g.gate, g.exit);
+};
+
+document.addEventListener('ready', function() {
+    document.body.addEventListener('keydown', function(e) {
+        keyPressed[e.keyCode] = 1;
+        keyFunc(e.keyCode, e);
+    });
+
+    document.body.addEventListener('keyup', function(e) {
+        keyPressed[e.keyCode] = 0;
+    });
+});
+})(window);
+
+    </script>
+    <style>
+
+      *{
+        margin:0;
+        padding:0;
+      }
+
+      div p {
+        font-size: normal;
+        font-weight: normal;
+      }
+
+      html, body {
+        height: 100%;
+      }
+
+      body {
+        background-color: black;
+        -webkit-transition-duration: 0.5s;
+      }
+
+      a {
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .monospace {
+          font-family: "menlo", "monaco", monospace;
+      }
+
+      .fontsize12px {
+          font-size: 12px;
+      }
+
+    </style>
+    <meta charset="utf-8"/>
+  </head>
+  <body onload="window.home.main();">
+    <div id="container_outer">
+      <div
+        id="menu"
+        class="monospace fontsize12px"
+        style="
+          padding: 0;
+          position: fixed;
+          top: 0px;
+          left: 0px;
+          z-index: 100;
+          width: 100%;
+          opacity: 0.8;
+          background-color: hsl(206, 50%, 80%);
+          -webkit-transition-duration: 0.5s;
+          height: 22px;
+          line-height: 22px;
+          display: -webkit-box;
+          -webkit-box-orient: horizontal;
+          -webkit-box-pack: start;
+          box-shadow: 1px 1px 1px black;
+          ">
+        <span
+          id="menuFileBtn"
+          style="
+            -webkit-transition-duration: 0.5s;
+            -webkit-box-sizing: border-box;
+            display: -webkit-box;
+            padding-left: 5px;
+            padding-right: 5px;
+            ">
+          File
+        </span>
+        <span
+          id="menuEditBtn"
+          style="
+            -webkit-transition-duration: 0.5s;
+            -webkit-box-sizing: border-box;
+            display: -webkit-box;
+            padding-left: 5px;
+            padding-right: 5px;
+            ">
+          Edit
+        </span>
+        <span
+          id="menuGateBtn"
+          style="
+            -webkit-transition-duration: 0.5s;
+            -webkit-box-sizing: border-box;
+            display: -webkit-box;
+            padding-left: 5px;
+            padding-right: 5px;
+            ">
+          Gate
+        </span>
+        <span 
+          style="
+            -webkit-box-flex: 1;
+            display: -webkit-box;"></span>
+        [<span id="mapTitle"></span>]
+        <span 
+          style="
+            -webkit-box-flex: 1;
+            display: -webkit-box;"></span>
+      </div>
+      <div
+        class="monospace fontsize12px"
+        id="menuFile"
+        style="
+          z-index: 100;
+          position: fixed;
+          top: 22px;
+          height: 0px;
+          overflow: hidden;
+          line-height: 22px;
+          padding: 0 3px 0 3px;
+          opacity: 0.8;
+          box-shadow: 1px 1px 1px black;
+          -webkit-transition-duration: 300ms;
+          -moz-transition-duration: 300ms;
+          ">
+        <p id="">new &nbsp;(not implemented)</p>
+        <p id="">save (not implemented)</p>
+        <p id="" onclick="location.reload()">reload</p>
+        <p id="" onclick="showXML()">dump &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Alt + A]</p>
+      </div>
+      <div
+        class="monospace fontsize12px"
+        id="menuEdit"
+        style="
+          z-index: 100;
+          position: fixed;
+          top: 22px;
+          left: 38px;
+          height: 0px;
+          overflow: hidden;
+          line-height: 22px;
+          padding: 0 3px 0 3px;
+          opacity: 0.8;
+          box-shadow: 1px 1px 1px black;
+          -webkit-transition-duration: 300ms;
+          -moz-transition-duration: 300ms;
+          ">
+        <p id="">undo (not implemented)</p>
+        <p id="">redo (not implemented)</p>
+        <p id=""></p>
+        <p id=""></p>
+      </div>
+      <div
+        class="monospace fontsize12px"
+        id="menuGate"
+        style="
+          z-index: 100;
+          position: fixed;
+          top: 22px;
+          left: 76px;
+          height: 0px;
+          overflow: hidden;
+          line-height: 22px;
+          padding: 0 3px 0 3px;
+          opacity: 0.8;
+          box-shadow: 1px 1px 1px black;
+          -webkit-transition-duration: 300ms;
+          -moz-transition-duration: 300ms;
+          ">
+        <p id="" onclick="promptNewGate();">new gate [Alt + X]</p>
+        <p id="">list (not implemented)</p>
+        <p id=""></p>
+        <p id=""></p>
+      </div>
+      <div
+        id="container_main"
+        style="
+          margin: 82px 50px 50px 50px;
+          position: relative;
+          border: solid 1px hsl(206, 50%, 80%);
+          _border-radius: 16px;
+          display: inline-block;
+          width: 0;
+          height: 0;
+          -webkit-transition-duration: 0.5s;">
+        <canvas
+          width="0"
+          height="0"
+          id="canvas_layer_map"
+          style="
+            display: inline-block;
+            position: relative;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            -webkit-transition-duration: 0.5s;">
+        </canvas>
+      </div><!-- id="container_main" -->
+    <div
+      style="
+        clear: both;">&nbsp;
+    </div>
+    </div>
+
+    <div
+      id="footer"
+      class="monospace fontsize12px"
+      style='
+        z-index: 100;
+        height: 22px;
+        line-height: 22px;
+        width: 100%;
+        color: white;
+        background: #444;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        vertical-algin: middle;
+        display: table-cell;
+        text-align: center;
+        letter-spacing: 1px;
+        opacity: 0.8;
+        font-weight: bold;'>
+      <p
+        style="
+          text-shadow: -1px -1px 1px #222;";>
+        COPYRIGHT (C) 2011
+        <a
+          href="http://tkimg.com/"
+          target="_blank"
+          style="
+            color: white;">TRANS-IMAGINEERING PROGRAMMING FORCE, INC.</a>
+        ALL RIGHTS RESERVED.
+      </p>
+    </div>
+  </body>
+</html>
+<!--
+
+http://www.wpzoom.com/wpzoom/new-freebie-wpzoom-developer-icon-set-154-free-icons/
+
+-->

@@ -1,0 +1,2101 @@
+<!doctype html>
+<html>
+  <head>
+    <title>chrmonitor.html</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="keywords" content="ゲーム,Game,ネットゲー,Network Game,MMO,MMORPG,ファンタジー,Fantasy,SF,Science Fiction," />
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <script style="text/javascript" src="my_globals.js"></script>
+    <script>//<![CDATA[
+//
+// global elements
+//
+Math.random.choice = function(array) {
+    return array[Math.floor(this() * array.length)];
+};
+
+Math.random.range = function(n){
+    return Math.floor(this() * n);
+};
+
+Math.random.hue = function() {
+    return this.range(360).toString();
+};
+
+Math.random.saturation = function() {
+    return this.range(101).toString() + '%';
+}
+
+Math.random.lightness = function() {
+    return this.range(101).toString() + '%';
+}
+
+var parsePx = function(number) {
+    return Math.floor(number).toString() + "px";
+};
+
+Number.prototype.toPx = function() {
+    return parsePx(this);
+};
+
+//
+// event settings
+//
+document.onkeydown = function(e) {home.changeKey(e);};
+document.onkeyup = function(e) {home.changeKey(e);};
+
+//
+// home - main object/namespace
+//
+var FPS = 60;
+var _SCREEN_WIDTH = 16 * 2 * 15 + 100; // 580px
+var _SCREEN_HEIGHT = 16 * 3 * 10; // 480px
+
+var home = {
+
+    STAGE_WIDTH: _SCREEN_WIDTH,
+    STAGE_HEIGHT: _SCREEN_HEIGHT,
+    
+    FRAME_RATE: FPS,
+    FRAME_LENGTH: 1000/FPS,
+    
+    keyInput: [],
+    vkeyInput: {},
+
+    main: function() {
+        this.dom = {};
+
+        this.dom.container_main = document.getElementById("container_main");
+        this.dom.container_main.style.width = home.STAGE_WIDTH.toPx();
+        this.dom.container_main.style.height = home.STAGE_HEIGHT.toPx();
+
+        this.fwmeter = new action.FWMeter(home.FRAME_LENGTH);
+        
+        this.fpsmeter = new action.FPSMeter(); 
+        this.fpsc = new action.FPSControl();
+
+        this.kdump = new action.KeyDumper();
+        this.kim = new action.KeyInputManager(home.keyInput);
+        this.vkim = new action.VirtualKeyInputManager(home.vkeyInput);
+
+        this.ms = new action.MS();
+
+        this.overlay = new action.Overlay();
+        
+        this.toggleMain();
+
+        setInterval("home.fpsmeter.writefps()", 100);
+    },
+    
+    loop: function () {
+        this.fwmeter.start();
+
+        // reaction phase, interation betweet the runners.
+        this.react();
+
+        // running phase, calculation inside the runners.
+        this.run();
+
+        // drawing phase, drawing process of the runners.
+        this.draw();
+
+        this.fwmeter.stop();
+
+        if (this.loopFlag) {
+            setTimeout("home.loop();", this.fwmeter.wait);
+        }
+    },
+
+    run: function() {
+        this.fpsmeter.run();
+        this.fpsc.run();
+        this.kdump.run();
+        this.kim.run();
+        this.vkim.run();
+
+        this.ms.run();
+        this.overlay.run();
+    },
+
+    react: function() {
+        this.ms.react();
+        this.overlay.react();
+    },
+
+    draw: function() {
+        this.ms.draw();
+        this.overlay.draw();
+    },
+
+    toggleMain: function() {
+        if (this.loopFlag) {
+            delete this.loopFlag;
+        } else {
+            this.loopFlag = 1;
+            this.loop();
+        }
+    },
+    
+    changeKey: function(event) {
+        home.keyInput[event.keyCode] = event.type === "keydown" ? 1 : 0;
+        if (event.type == "keydown" && (event.keyCode == 32
+                                     || event.keyCode == 37
+                                     || event.keyCode == 38
+                                     || event.keyCode == 39
+                                     || event.keyCode == 40
+                                   )) {
+            event.preventDefault();
+        }
+        if (event.type == "keydown" && event.keyCode == 27) {
+            home.toggleMain();
+        }
+    }
+};
+
+//
+// action - runnable classes.
+//
+var action = {};
+
+action.KeyInputManager = Object.derive({
+    constructor: function(keyInput) {
+        this.keyInput = keyInput;
+        this.prevKeyInput = this.keyInput.slice(0);
+        this.currKeyInput = this.keyInput.slice(0);
+    },
+    
+    run: function() {
+        this.prevKeyInput = this.currKeyInput;
+        this.currKeyInput = this.keyInput.slice(0);
+    },
+    
+    toggleOn: function(key) {
+        return this.currKeyInput[key] && !this.prevKeyInput[key];
+    },
+    
+    toggleOff: function(key) {
+        return !this.currKeyInput[key] && this.prevKeyInput[key];
+    },
+    
+    key: function(key) {
+        return this.currKeyInput[key];
+    }
+});
+
+action.VirtualKeyInputManager = action.KeyInputManager.derive({
+    constructor: function(keyInput) {        
+        this.keyInput = keyInput || {};
+        this.prevKeyInput = Object(this.keyInput);
+        this.currKeyInput = Object(this.keyInput);
+    },
+
+    run: function() {
+        this.prevKeyInput = this.currKeyInput;
+        this.currKeyInput = Object(this.keyInput)
+    }
+});
+
+action.Listener = Object.derive({
+    initMQ: function() {
+        this._mqReady = 1;
+        this._mq = new Array(); // the message queue
+        this.listen = this._listen;
+    },
+
+    checkMQ: function() {
+        if (this._mqReady) {
+            return;
+        } else {
+            this.initMQ();
+        }
+    },
+
+    message: function(ms) {
+        this.checkMQ();
+        this._mq.push(ms);
+    },
+
+    listen: function() {
+    },
+
+    _listen: function() {
+        var ms;
+        var handlerFunction;
+        while (ms = this._mq.shift()) {
+            if (handlerFunction = this.Listening[ms.head]) {
+                handlerFunction.call(this, ms);
+            }
+        }
+    },
+
+    Listening: {} // Message handler functions of the object
+});
+
+util = {};
+
+util.PropertyBinder = Object.derive({
+    constructor: function() {
+        this._binds = [];
+    },
+
+    setTarget: function(target) {
+        this.target = target;
+    },
+
+    bind: function(p, v, m) {
+        this._binds.push({p: p, v: v, m: m});
+    },
+
+    resetValues: function() {
+        for (var i = 0; i < this._binds.length; i++) {
+            b = this._binds[i];
+            this.target[b.p] = b.v.value[b.m]()
+        }
+    },
+
+    runValues: function() {
+        for (var i = 0; i < this._binds.length; i++) {
+            b = this._binds[i];
+            b.v.run();
+        }
+    }
+})
+
+action.FWMeter = Object.derive({
+    constructor: function(frame_length) {
+        this.dom = byId("frame-wait");
+        this.frame_length = frame_length;
+        this.t = 0;
+    },
+    
+    start: function() {
+        this.t = (new Date).getTime();
+    },
+    
+    stop: function() {
+        var diff = (new Date()).getTime() - this.t;
+        this.wait = this.frame_length - diff;
+        this.dom.innerHTML = 'wait: ' + this.wait.toPrecision(4).toString();        
+    }
+});
+    
+action.FPSMeter = action.Listener.derive({
+    constructor: function() {
+        this.elem = byId("fps-meter");
+        this.elem_ = byId("fps-monitor");
+        this.i = 0;
+        this.j = 0;
+        this.met = [0,0,0,0,0,0,0,0,0,0];
+        this.mapName = "-";
+    },
+    
+    run: function() {
+        this.i += 1;
+        this.met[0] += 1;
+        this.elem.innerHTML = this.i.toString();
+        this.listen();
+    },
+
+    Listening: {
+        MN: function(ms) {
+            this.mapName = ms.name;
+        }
+    },
+    
+    writefps: function() {
+        this.j += 1;
+        var s = 0;
+        for (var i = 0; i < this.met.length; i++) {
+            s += this.met[i];
+        }
+        this.elem_.innerHTML = [
+            "map: " + this.mapName + "<br />",
+            "cnt: " + this.j.toString(),
+            "<div style='width: 120px; background-color: #225533; '>",
+            "<div style='width:" + (s*2).toString() + "px; background-color:#aaff00; display: block;'>",
+            "fps:<span style='color: #800; '>" + s.toString() + "</span></div></div>"
+        ].join('');
+        this.i = 0;
+        this.met.unshift(0);
+        this.met.pop();
+    }
+});
+
+action.RunnerNode = action.Listener.derive({
+    runnerCheck: function() {
+        this._runners = new Array();
+        for (var i in this) {
+            if (typeof this[i].run === "function") {
+                this._runners.push(this[i]);
+            }
+        }
+    },
+    
+    run: function() {
+        this.runnersRun();
+    },
+    
+    runnersRun: function() {
+        for (var i = 0; i < this._runners.length; i++) {
+            this._runners[i].run();
+        }
+    }
+});
+
+action.FPSControl = action.RunnerNode.derive({
+    constructor: function() {
+        this.dom = document.getElementById("container_fps");
+        //this.labl = document.getElementById("label_fps");
+        this.left = new value.Const(0);
+        this.DUR = FPS * 0.20;
+        this.controlToggle = 1;
+    },
+    
+    run: function() {
+        if (home.kim.toggleOn(78)) {
+            var goal = this.controlToggle * -130;
+            this.left = new value.Track(
+                [[this.left.value, this.DUR], [goal]]
+            );
+            this.controlToggle ^= 1;
+        }
+        this.left.run();
+        this.dom.style.left = this.left.value.toPx();
+        this.dom.style.top = this.left.value.toPx();
+        //this.labl.style.left = (-this.left.value / 5 - 26).toPx();
+        //this.labl.style.top = (-this.left.value / 5 - 26).toPx();
+    }
+});
+
+action.KeyDumper = Object.derive({
+    constructor: function() {
+        this.x = 200;
+        this.y = 0;
+        this.dom = byId("custom-field");
+    },
+    
+    run: function() {
+        var a = [];
+        for (var i = 0; i < home.keyInput.length; i++) {
+            if (home.keyInput[i]) a.push(i);
+        }
+        this.dom.innerHTML = "keys: " + a.toString();
+    }
+});
+
+action.CommandProcessor = action.Listener.derive({
+    constructor: function(env) {
+        this.env = env;
+    },
+
+    react: function() {
+        this.listen();        
+    },
+
+    run: function() {
+    },
+
+    Listening: {
+        CMD: function(ms) {
+            if (ms.cmd.charAt(0) === '/') {
+                this.dispatch(ms.cmd.substring(1));
+            } else {
+                this.env.sceneChars.bubble.message({head: "SC", comment: ms.cmd});
+            }
+        }
+    },
+
+    dispatch: function(cmd) {
+        x = cmd.split(/  */);
+        op = x[0];
+        if (op === "alert") {
+            alert(x.splice(1).join(' '));
+        } else if (op === "fade") {
+            home.ms.sceneCover.message({head: "TC"});
+        } else if (op === "quake") {
+            home.ms.camera.message({head: "EQ"});
+        } else if (op === "change") {
+            home.ms.message({head: "TGLMAP"});
+        } else if (op === "fade") {
+        } else if (op === "fade") {
+        } else if (op === "fade") {
+        }
+    }
+
+});
+
+action.MS = action.Listener.derive({
+    constructor: function() {
+        var self = this;
+
+        this.width = home.STAGE_WIDTH;
+        this.height = home.STAGE_HEIGHT;
+
+        this.dom = document.getElementById("container_main_inner");
+        this.dom.style.width = this.width.toPx();
+        this.dom.style.height = this.height.toPx();
+
+        this.alive = 1;
+        this.mapToggle = 0;
+        this.cmdp = new action.CommandProcessor(this);
+        this.sceneBG = new action.Scene0();
+        this.sceneCover = new action.Scene1();
+        this.map = new morph.Map();
+        this.sceneMap = new action.Scene2(this);
+        this.sceneChars = new action.Scene3(this);
+        this.camera = new machine.CameraPoint(this.sceneChars.krile, this);
+        this.setMapURL("map00.xml", "0", function() {
+            self.sceneCover.message({head: "TC"});
+        });
+    },
+
+    init: function(dto) {
+        this.sceneMap.init();
+        if (typeof dto.pt === "object") {
+            this.sceneChars.krile.message({head: "POSITION", x: dto.pt.x, y: dto.pt.y});
+        }
+        this.sceneChars.init();
+        this.sceneChars.plate.message({head: "SC", comment: dto.title});
+    },
+
+    react: function() {
+        this.listen();
+        if (this.alive) {
+            this.cmdp.react();
+            this.sceneBG.react();
+            this.sceneCover.react();
+            this.camera.react();
+            this.sceneMap.react();
+            this.sceneChars.react();
+        }
+    },
+
+    Listening: {
+        SM: function(ms) {
+            this.setMap.apply(this, ms.args);
+            this.sceneBG.message({
+                head: "CLEAR"
+            });
+            this.sceneChars.krile.message({head: "MOVE", after: 16});
+            this.sceneChars.krile.message({head: "POSITION", state: 0});
+            setTimeout(function(){
+                ms.sender.message({head:ms.callback});
+            }, 400);
+        },
+
+        SMU: function(ms) {
+            var self = this;
+            ms.args.push(function(){
+                ms.sender.message({head:ms.callback});                
+            });
+            this.setMapURL.apply(this, ms.args);
+            this.sceneBG.message({
+                head: "CLEAR"
+            });
+            this.sceneChars.krile.message({head: "MOVE", after: 16});
+            this.sceneChars.krile.message({head: "POSITION", state: 0});
+        },
+
+        TGLMAP: function(ms) {
+            this.toggleMap();
+        },
+
+        GATE: function(ms) {
+            this.loadMapURL(ms.url, ms.gate);
+        }
+    },
+
+    toggleAlive: function() {
+        this.alive ^= 1;
+    },
+
+    toggleMap: function() {
+        var mapToggle = this.mapToggle ^= 1;
+        this.sceneCover.message({
+            head: "TC",
+            sender: this,
+            callback: "SMU",
+            callbackArgs: ["map0" + mapToggle + ".xml", "0"],
+        });
+    },
+
+    setMap: function(label, callback) {
+        this.map = new morph.Map({textarea: label});
+        this.init();
+        if (typeof callback === "function") {
+            callback.apply(undefined);
+        }
+    },
+
+    setMapURL: function(url, gate, callback) {
+        var self = this;
+        if (home && home.fpsmeter) {
+            home.fpsmeter.message({head: "MN", name: url});
+        }
+        this.map = new morph.Map({url: url, gate: gate, callback: function(dto){
+            self.init(dto);
+            typeof callback === "function" && callback.apply();
+        }});
+    },
+
+    loadMapURL: function(url, gate) {
+        this.sceneCover.message({
+            head: 'TC',
+            sender: this,
+            callback: 'SMU',
+            callbackArgs: [url, gate]
+        });
+    },
+
+    run: function() {
+        if (this.alive) {
+            this.sceneBG.run();
+            this.sceneCover.run();
+            this.camera.run();
+            this.sceneMap.run();
+            this.sceneChars.run();
+        }
+    },
+
+    draw: function() {
+        if (this.alive) {
+            this.sceneBG.draw();
+            this.sceneCover.draw();
+            this.camera.draw();
+            this.sceneMap.draw();
+            this.sceneChars.draw();
+        }
+    }
+})
+
+action.Scene0 = action.RunnerNode.derive({
+    constructor: function(env) {
+        this.canvas_main = document.getElementById("canvas_main");
+        this.canvas_main.width = home.STAGE_WIDTH;
+        this.canvas_main.height = home.STAGE_HEIGHT;
+        this.ctx = this.canvas_main.getContext("2d");
+        
+        this.squareFog = new machine.SquareFog(this.canvas_main);
+        
+        FLY_MAX = 3;
+        this.flies = new machine.List();
+        for (var i = 0; i < FLY_MAX; i++) {
+            this.flies.push(new machine.Fly(
+                Math.random.range(this.canvas_main.width),
+                Math.random.range(this.canvas_main.width),
+                this.ctx,
+                116
+            ));
+        }
+
+        this.runnerCheck();
+    },
+
+    react: function(){
+        this.listen();
+    },
+
+    Listening: {
+        CLEAR: function(ms) {
+            var hue = 120 + Math.random.range(120);
+            this.squareFog.setHue(hue);
+            this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+            this.ctx.fillStyle = "hsla(" + hue + ",100%,50%,0.3)";
+            this.ctx.fillRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+        }
+    },
+    
+    run: function() {
+        this.runnersRun();
+        
+    },
+
+    draw: function() {
+        this.squareFog.draw();
+        this.flies.draw();        
+    },
+});
+
+action.Scene1 = action.RunnerNode.derive({
+    constructor: function() {
+        this.canvas_main = document.getElementById("canvas_layer_curtain");
+        this.canvas_main.width = home.STAGE_WIDTH;
+        this.canvas_main.height = home.STAGE_HEIGHT;
+        this.ctx = this.canvas_main.getContext("2d");
+
+        this.curtainFlag = 0;
+
+        this.CURTAIN_OPEN_DUR = FPS * 0.5;
+        this.curtain = new value.Const(1);
+        this.ctx.fillStyle = "black";
+        this.ctx.fillRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+    },
+
+    react: function() {
+        this.listen();
+    },
+
+    Listening: {
+        TC: function(ms) {
+            var self = this;
+            var callback;
+            if (ms.callback) {
+                callback = function () {
+                    ms.sender.message({
+                        head: ms.callback,
+                        args: ms.callbackArgs,
+                        sender: self,
+                        callback: "TC"
+                    });
+
+                }
+            }
+            this.toggleCurtain(callback);
+        }
+    },
+
+    toggleCurtain: function(callback) {
+        this.canvas_main.style.visibility = "visible";
+
+        this.callback = callback;
+
+        this.goal = this.curtainFlag;
+        var a = this.curtainFlag ^= 1;
+        this.curtain = new value.Track([[a, this.CURTAIN_OPEN_DUR], [this.goal]]);
+    },
+    
+    run: function() {
+        if (this.curtain.onPhaseChange()) {
+            if (this.curtain.value === 0) {
+                this.canvas_main.style.visibility = "hidden";
+            }
+            if (typeof this.callback === "function") {
+                this.callback.apply();
+            }
+        }
+        this.curtain.run();
+    },
+
+    draw: function() {
+        if (this.curtain.isChanging()) {
+            this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+            this.ctx.fillStyle = "hsla(0,100%,0%," + this.curtain.value.toPrecision(4) + ")";
+            this.ctx.fillRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+        }
+    },
+});
+
+action.Scene2 = action.RunnerNode.derive({
+    constructor: function(env) {
+        this.env = env;
+
+        this.canvas_main = document.getElementById("canvas_layer_map");
+        this.ctx = this.canvas_main.getContext("2d");
+        this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+    },
+
+    init: function() {
+        this.canvas_main.width = this.env.map.width * 16;
+        this.canvas_main.height = this.env.map.height * 16;
+
+        this._map = this.env.map._data;
+
+        GRID_SIZE = 16;
+        this.HUE = Math.random.range(360);
+        this.boxes = new machine.List();
+
+        for (var i = 0; i < this._map.length; i++) {
+            for (var j = 0; j < this._map[i].length; j++) {
+                if (this._map[i][j] === "1") {
+                    this.boxes.push(
+                        new machine.BogoBox(
+                            this.ctx,
+                            j * GRID_SIZE,
+                            i * GRID_SIZE,
+                            GRID_SIZE,
+                            "hsla(" + this.HUE.toString() + ",50%,80%,1)",
+                            1
+                        )
+                    );
+                } else if (this._map[i][j] === "0") {
+                    this.boxes.push(
+                        new machine.BogoBox(
+                            this.ctx,
+                            j * GRID_SIZE,
+                            i * GRID_SIZE,
+                            GRID_SIZE,
+                            "hsla(" + this.HUE.toString() + ",50%,"+Math.random.range(100).toString()+"%,0.4)",
+                            null
+                        )
+                    );
+                } else if (this._map[i][j] === "X" || this._map[i][j] === "Y") {
+                    this.boxes.push(
+                        new machine.Box(
+                            this.ctx,
+                            j * GRID_SIZE,
+                            i * GRID_SIZE,
+                            GRID_SIZE,
+                            "hsla(" + (this.HUE + 180) + ", 100%, 50%, 1)",
+                            4
+                        )
+                    );
+                }
+            }
+        }
+        
+        this.boxes.draw();                
+    },
+
+    react: function() {},
+
+    run: function() {
+        this.canvas_main.style.left = (-this.env.camera.x).toPx();
+        this.canvas_main.style.top = (-this.env.camera.y).toPx();
+    },
+
+    draw: function() {},
+});
+
+action.Scene3 = Object.derive({
+    constructor: function(env) {
+        this.env = env;
+        this.canvas_main = document.getElementById('canvas_layer_moogle');
+        this.ctx = this.canvas_main.getContext("2d");
+        this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+
+        this.krile = new machine.Krile(
+            this,
+            (localStorage.krile_x || 2) * 16,
+            (localStorage.krile_y || 10) * 16,
+            "ff5krile.png"
+        );
+        this.krile.prot = 1;
+
+        this.bubble = new action.BubbleOnce(this.krile);
+
+        MOOGLE_MAX = 30;
+        this.moogles = new machine.List();
+        for (var i = 0; i < MOOGLE_MAX; i++) {
+            var sprite = i == 0 ? "ff5lenna.png" :
+                     i == 1 ? "ff5cloud.png" : "ff5moogle.png"
+            var moogle = new machine.AutoKrile(
+                this,
+                15*16, 38*16,
+                sprite
+            );
+            this.moogles.push(moogle);
+            if (Math.random() < 0.2) {
+                var bubble = new action.Bubble(moogle);
+                bubble.setDoc("moogle");
+                bubble.setPeriod(Math.random.choice([5,6,7,9]) * FPS);
+                this.moogles.push(bubble);
+            }
+        }
+        this.plate = new action.InfoBubbler({x: 100, y: (this.env.height - 100) * 1 / 7});
+    },
+
+    init: function() {
+        this.canvas_main.width = this.env.map.width * 16;
+        this.canvas_main.height = this.env.map.height * 16;
+    },
+
+    react: function() {
+        this.bubble.react();
+        this.plate.react();
+        this.krile.react({
+            up: home.kim.key(38) || home.vkim.key("up"),
+            down: home.kim.key(40) || home.vkim.key("down"),
+            left: home.kim.key(37) || home.vkim.key("left"),
+            right: home.kim.key(39) || home.vkim.key("right"),
+            speed: home.kim.toggleOn(83)
+        });
+        this.moogles.react();
+    },
+
+    run: function() {
+        this.krile.run();
+        this.bubble.run();
+        this.plate.run();
+        this.moogles.run();
+
+        this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+        this.moogles.draw();
+        this.krile.draw();
+        this.bubble.draw();
+        this.plate.draw();
+        this.canvas_main.style.left = (-this.env.camera.x).toPx();
+        this.canvas_main.style.top = (-this.env.camera.y).toPx();
+    },
+
+    draw: function() {},
+});
+
+action.Overlay = action.Listener.derive({
+    constructor: function(env) {
+        this.env = env;
+
+        this.dom = document.getElementById('overlay');
+        this.dom.style.width = "0px";
+        this.dom.style.height = "0px";
+
+        this.flg = 0;
+        this.x = new value.Track([[0]]);
+        this.y = new value.Track([[0]]);
+        this.a = new value.Track([[0]]);
+
+        this.binder = new util.PropertyBinder();
+        this.binder.setTarget(this.dom.style);
+        this.binder.bind("width", this.x, "toPx");
+        this.binder.bind("height", this.y, "toPx");
+        this.binder.bind("opacity", this.a, "toString");
+
+        this.X_MAX = home.STAGE_WIDTH;
+        this.Y_MAX = home.STAGE_HEIGHT;
+    },
+
+    init: function() {},
+
+    Listening: {
+        SLD: function() {
+            if (this.flg == 0) {
+                this.slideIn();
+            } else {
+                this.slideOut();
+            }
+            this.flg ^= 1;
+        },
+
+        FD: function() {
+            if (this.flg == 0) {
+                this.fadeIn();
+            } else {
+                this.fadeOut();
+            }
+            this.flg ^= 1;
+        },
+    },
+
+    react: function() {
+        this.listen();
+        if (home.kim.toggleOn(81)) {
+            this.message({head: Math.random.choice(["SLD", "FD"])});
+        }
+    },
+
+    slideIn: function() {
+        this.x.init([[0, 16], [this.X_MAX]]);
+        this.y.init([[this.Y_MAX]]);
+        this.a.init([[1]]);
+    },
+
+    slideOut: function() {
+        this.x.init([[this.X_MAX, 16], [0]]);
+        this.y.init([[this.Y_MAX]]);
+        this.a.init([[1]]);
+    },
+
+    fadeIn: function() {
+        this.x.init([[this.X_MAX]]);
+        this.y.init([[this.Y_MAX]]);
+        this.a.init([[0, 16], [1]]);
+    },
+
+    fadeOut: function() {
+        this.x.init([[this.X_MAX]]);
+        this.y.init([[this.Y_MAX]]);
+        this.a.init([[1, 16], [0]]);
+    },
+
+    run: function() {
+        this.binder.runValues();
+    },
+
+    draw: function() {
+        this.binder.resetValues();
+    }
+});
+
+action.BubbleManager = action.Listener.derive({
+    constructor: function() {},
+
+    Listening: {
+        SCENE: function() {
+            
+        }
+    }
+});
+
+action.Bubble = Object.derive({
+    constructor: function(target) {
+        this.age = 0;
+        this.PERIOD = FPS * 8;
+        this.alpha = new value.SineWaveAbs(this.PERIOD, 2);
+        this.target = target || {x: 0, y: 0};
+        this.wrap = document.createElement("div");
+        this.wrap.style.position = "absolute";
+        this.wrap.style.background = "url(tweet_bubble2.png) right 0px no-repeat";
+        this.wrap.style.padding = "0px 8px 0px 0px";
+        this.dom = document.createElement("div");
+        this.dom.style.background = "url(tweet_bubble2.png) 0px 0px no-repeat";
+        this.dom.style.whiteSpace = "nowrap";
+        this.dom.style.padding = "0px 0px 4px 8px";
+        this.dom.style.margin = "0px 0px 0px -2px";
+        this.dom.style.lineHeight = "20px";
+        this.dom.style.color = "#2A7090";
+        this.wrap.appendChild(this.dom)
+        byId("container_bubbler").appendChild(this.wrap);
+    },
+    
+    react: function() {
+    },
+    
+    setDoc: function(doc) {
+        this.doc = byId(doc).innerHTML.trim().split("\n");
+        this.dom.innerHTML = this.doc[0];
+    },
+
+    setPeriod: function(period) {
+        this.age = 0;
+        this.PERIOD = period;
+        this.alpha = new value.SineWaveAbs(this.PERIOD, 2);
+    },
+
+    run: function() {
+        this.age += 1;
+        this.alpha.run();
+        if (this.age * 2 % this.PERIOD === 0) {
+            this.dom.innerHTML = '<a href="http://google.com/" style="text-decoration: none; color: #2A7090;" target="_blank">' + this.doc[this.age * 2 / this.PERIOD % this.doc.length] + '</a>';
+        }
+    },
+
+    draw: function() {
+        this.wrap.style.top = (this.target.y - home.ms.camera.y - 28).toPx();
+        this.wrap.style.left = (this.target.x - home.ms.camera.x + 3).toPx();
+        this.wrap.style.opacity = (this.alpha.value - 0.5).toString();        
+    }
+});
+
+action.BubbleOnce = action.Listener.derive({
+    POPUP_DUR: FPS / 4,
+    DEFAULT_COMMENT: "♪",
+
+    constructor: function(target) {
+        this.age = 0;
+        this.alpha = new value.Track([[0]]);
+        this.pos = new value.Track([[0]]);
+        this.target = target || {x: 0, y: 0};
+        this.makeDom();
+        byId("container_bubbler").appendChild(this.wrap);
+    },
+
+    makeDom: function() {
+        this.wrap = document.createElement("div");
+        this.wrap.style.position = "absolute";
+        this.wrap.style.background = "url(tweet_bubble2.png) right 0px no-repeat";
+        this.wrap.style.padding = "0px 8px 0px 0px";
+        this.dom = document.createElement("div");
+        this.dom.style.background = "url(tweet_bubble2.png) 0px 0px no-repeat";
+        this.dom.style.whiteSpace = "nowrap";
+        this.dom.style.padding = "0px 0px 4px 8px";
+        this.dom.style.margin = "0px 0px 0px -2px";
+        this.dom.style.lineHeight = "20px";
+        this.dom.style.color = "#2A7090";
+        this.wrap.appendChild(this.dom);        
+    },
+    
+    react: function() {
+        this.listen();
+    },
+
+    Listening: {
+        SC: function(ms) {
+            if (ms.comment) {
+                this.setComment(ms.comment);
+            } else {
+                this.setComment(this.DEFAULT_COMMENT);
+            }
+        }
+    },
+
+    setComment: function(comment) {
+        var a = this.POPUP_DUR;
+        var b = this.commentDisplayTime(comment);
+        this.comment = comment;
+        this.dom.innerHTML = comment;
+        this.alpha.init([[0, a], [1, b], [1, a], [0]]);
+        this.pos.init([[16, a], [0, b], [0, a], [-16]]);
+    },
+
+    commentDisplayTime: function(comment) {
+        return FPS * Math.log(comment.length + 1);
+    },
+    
+    run: function() {
+        this.age += 1;
+        this.alpha.run();
+        this.pos.run();
+    },
+
+    draw: function() {
+        this.wrap.style.top = (this.target.y - home.ms.camera.y - 28 + this.pos.value).toPx();
+        this.wrap.style.left = (this.target.x - home.ms.camera.x + 3).toPx();
+        this.wrap.style.opacity = this.alpha.value.toString();
+    },
+
+    remove: function() {
+        byId('container_bubbler').removeChild(this.wrap);
+    }
+});
+
+action.InfoBubbler = action.BubbleOnce.derive({
+    POPUP_DUR: FPS / 4*2,
+    DEFAULT_COMMENT: "-",
+
+    makeDom: function() {
+        this.wrap = document.createElement("div");
+        this.wrap.style.position = "absolute";
+        this.wrap.style.width = (home.STAGE_WIDTH - this.target.x * 2).toPx();
+        this.wrap.style.background = "#8fc";
+        this.wrap.style.padding = "10px";
+        this.wrap.style.border = "solid 5px #5a7";
+        this.wrap.style.borderRadius = "10px";
+        this.wrap.style.boxShadow = "2px 2px 10px #000";
+        this.dom = document.createElement("div");
+        this.dom.style.textAlign = "center";
+        this.dom.style.fontSize = "x-large";
+        this.dom.style.fontFamily = "Times New Roman";
+        this.dom.style.fontWeight = "bold";
+        this.dom.style.padding = "5px";
+        this.dom.style.lineHeight = "20px";
+        this.dom.style.color = "#0a8";
+        this.wrap.appendChild(this.dom);        
+    },
+
+    setComment: function(comment) {
+        var a = this.POPUP_DUR;
+        var b = this.commentDisplayTime(comment);
+        this.comment = comment;
+        this.dom.innerHTML = comment;
+        this.alpha.init([[0, a], [1, b], [1, a], [0]]);
+        this.pos.init([[8, a], [0, b], [0, a], [-16]]);
+    },
+
+
+    commentDisplayTime: function(comment) {
+        return FPS * 1.6;
+    },
+
+    draw: function() {
+        this.wrap.style.top = (this.target.y + 0.7*this.pos.value).toPx();
+        this.wrap.style.left = (this.target.x).toPx();
+        this.wrap.style.opacity = (this.alpha.value * 0.85).toString();
+    }
+});
+
+//
+// machine - state machines.
+//
+var machine = {};
+
+// state machine which have state machines in it and drive them.
+machine.List = Object.derive({
+    constructor: function(array) {
+        this.array = array || new Array();
+    },
+    
+    react: function() {
+        for (var i = 0; i < this.array.length; i++) {
+            this.array[i].react();
+        }
+    },
+    
+    run: function() {
+        for (var i = 0; i < this.array.length; i++) {
+            this.array[i].run();
+        }
+    },
+    
+    draw: function() {
+        for (var i = 0; i < this.array.length; i++) {
+            this.array[i].draw();
+        }
+    },
+    
+    push: function(a) {
+        this.array.push(a)
+    }
+});
+
+machine.Krile = action.Listener.derive({
+    constructor: function(env, x, y, spriteSheet) {
+        this.spriteSheet = new Image();
+        this.spriteSheet.src = spriteSheet || "ff5krile.png";
+        this.chardim = 16;
+        
+        this.toggle = 0;
+        this.state = 0;
+        this.moveCount = 0;
+        this.stopCount = 0;
+        this.nextStopCount = 0;
+        this.moveSpeed = 1;
+        this.nextSpeed = 1;
+        
+        this.x = x;
+        this.y = y;
+
+        this.coord = {};
+        this.coord.x = Math.floor(x / 16);
+        this.coord.y = Math.floor(y / 16);
+
+        this.next = {};
+        this.next.x = this.coord.x;
+        this.next.y = this.coord.y;
+        
+        this.env = env;
+    },
+    
+    react: function(input) {
+        this.listen();
+        if (input.speed) {
+            this.toggleSpeed();
+        }
+        if (this.stopCount === 0 && this.moveCount === 0) {
+            if (this.nextStopCount !== 0) {
+                this.stopCount = this.nextStopCount;
+                this.nextStopCount = 0;
+                return;
+            }
+            if (input.up) {
+                this.state = 1;
+                this.moveSpeed = this.nextSpeed;
+                this.next.x = this.coord.x;
+                this.next.y = this.coord.y - 1;
+                this.tryMove();
+            } else if (input.down) {
+                this.state = 0;
+                this.moveSpeed = this.nextSpeed;
+                this.next.x = this.coord.x;
+                this.next.y = this.coord.y + 1;
+                this.tryMove();
+            } else if (input.left) {
+                this.state = 2;
+                this.moveSpeed = this.nextSpeed;
+                this.next.x = this.coord.x - 1;
+                this.next.y = this.coord.y;
+                this.tryMove();
+            } else if (input.right) {
+                this.state = 3;
+                this.moveSpeed = this.nextSpeed;
+                this.next.x = this.coord.x + 1;
+                this.next.y = this.coord.y;
+                this.tryMove();
+            }
+        }
+    },
+
+    Listening: {
+        TS: function(ms) {
+            this.toggleSpeed();
+        },
+
+        STOP: function(ms) {
+            this.nextStopCount = Infinity;
+        },
+
+        MOVE: function(ms) {
+            if (ms.after) {
+                this.stopCount = ms.after;
+            } else {
+                this.stopCount = 0;
+            }
+            this.nextStopCount = 0;
+        },
+
+        POSITION: function(ms) {
+            this.moveCount = 0;
+            if (ms.x) {
+                this.coord.x = ms.x;
+                this.x = ms.x * this.chardim;
+            }
+            if (ms.y) {
+                this.coord.y = ms.y;
+                this.y = ms.y * this.chardim;
+            }
+            if (typeof ms.state === "number" && 0 <= ms.state && ms.state <= 3) {
+                this.state = ms.state;
+            }
+        }
+    },
+
+    toggleSpeed: function() {
+        this.nextSpeed = this.nextSpeed * 2 % 16 || 1;
+    },
+
+    tryMove: function() {
+        if (this.env.env.map.passable(this.next) || !this.env.env.map.passable(this.coord)) {
+            this.coord.x = this.next.x;
+            this.coord.y = this.next.y;
+            if (this.prot) {
+                localStorage.krile_x = this.coord.x;
+                localStorage.krile_y = this.coord.y;
+                var event;
+                if (event = this.env.env.map.onEnter(this.next)) {
+                    this.env.env.message({head: "GATE", url: event.url, gate: event.gate});
+                    this.message({head: "STOP"});
+                    this.env.bubble.message({head: "SC", comment: "ワープ！"});
+                }
+            }
+            this.moveCount = 16;
+        }
+    },
+    
+    run: function() {
+        if (this.stopCount > 0) {
+            this.stopCount -= 1;
+            return;
+        }
+        if (this.moveCount > 0) {
+            this.moveCount -= this.moveSpeed;
+            if (this.moveCount % 8 == 0) this.toggle ^= 1;
+            if (this.state === 1) {
+                this.y = this.y  - this.moveSpeed;
+            } else if (this.state === 0) {
+                this.y = this.y + this.moveSpeed;
+            } else if (this.state === 2) {
+                this.x = this.x - this.moveSpeed;
+            } else if (this.state === 3) {
+               this.x = this.x + this.moveSpeed;
+            }
+        }
+    },
+    
+    draw: function() {
+        this.env.ctx.drawImage(
+            this.spriteSheet,
+            this.state * 32 + this.chardim * this.toggle,
+            0,
+            this.chardim,
+            this.chardim,
+            this.x,
+            this.y,
+            this.chardim,
+            this.chardim
+        );
+    }
+});
+
+machine.AutoKrile = machine.Krile.derive({
+    react: function() {
+        this.listen();
+        if (this.stopCount === 0 && this.moveCount === 0) {
+            if (this.nextStopCount !== 0) {
+                this.stopCount = this.nextStopCount;
+                this.nextStopCount = 0;
+                return;
+            }
+            this.state = Math.random.range(4);
+            this.moveSpeed = this.nextSpeed;
+
+            if (this.state == 1) {
+                this.next.x = this.coord.x;
+                this.next.y = this.coord.y - 1;
+            } else if (this.state == 0) {
+                this.next.x = this.coord.x;
+                this.next.y = this.coord.y + 1;
+            } else if (this.state == 2) {
+                this.next.x = this.coord.x - 1;
+                this.next.y = this.coord.y;
+            } else if (this.state == 3) {
+                this.next.x = this.coord.x + 1;
+                this.next.y = this.coord.y;
+            }
+            this.tryMove();
+            if (Math.random() < 0.01 * this.moveSpeed * this.moveSpeed) {
+                this.toggleSpeed();
+            }
+        }
+    }
+});
+
+machine.Box = Object.derive({
+    constructor: function(ctx, x, y, size, color, frame) {
+        this.ctx = ctx;
+        this.x = x;
+        this.y = y;
+        this.color = color || "white";
+        this.size = size;
+        this.frame = typeof frame === "number" ? frame : Math.random.range(3) + 2;
+    },
+
+    react: function() {
+    },
+
+    run: function() {
+    },
+
+    draw: function() {
+        this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.fillRect(
+            this.x + this.frame,
+            this.y + this.frame,
+            this.size - this.frame * 2,
+            this.size - this.frame * 2
+        );
+        this.ctx.beginPath();
+    }
+});
+
+machine.BogoBox = machine.Box.derive({
+    draw: function() {
+        this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.fillRect(
+            this.x + this.frame,
+            this.y + this.frame,
+            this.size - this.frame * 2,
+            this.size - this.frame * 2
+        );
+        var z = 2;
+        var x0 = this.x + this.frame + Math.random.range(z),
+            y0 = this.y + this.frame + Math.random.range(z),
+            x1 = this.x + this.frame + Math.random.range(z);
+            y1 = this.y + this.size - this.frame + Math.random.range(z),
+            x2 = this.x + this.size - this.frame + Math.random.range(z),
+            y2 = this.y + this.size - this.frame + Math.random.range(z),
+            x3 = this.x + this.size - this.frame + Math.random.range(z),
+            y3 = this.y + this.frame + Math.random.range(z);
+        this.ctx.moveTo(x0, y0);
+        this.ctx.lineTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.lineTo(x3, y3);
+        this.ctx.lineTo(x0, y0);
+        this.ctx.fill();
+    }
+});
+
+machine.SquareFog = Object.derive({
+    constructor: function(canvas) {
+        this.canvas = canvas;
+        this.ctx = this.canvas.getContext("2d");
+        this.a = 0.2; // size ratio againt screen size;
+        this.hue = 180;
+        this.lumino_set = ["100", "50", "0", "0", "0", "0"]
+
+        this.darkness = new value.SineWave(FPS * 15, 0.45, FPS * 15 * 3 / 4).shift(0.35);
+    },
+
+    run: function() {
+        this.darkness.run();
+    },
+
+    setHue: function(hue) {
+        this.hue = hue;
+    },
+
+    draw: function() {
+        if (Math.random() < this.darkness.value) {
+            this.ctx.fillStyle = "hsla(" + this.hue + ",50%," + Math.random.choice(this.lumino_set) + "%,0.1)";
+            this.ctx.fillRect(
+                Math.random.range(this.canvas.width * (1 + this.a)) - this.canvas.width * this.a ,
+                Math.random.range(this.canvas.height * (1 + this.a)) - this.canvas.height * this.a,
+                this.canvas.width * this.a, this.canvas.height * this.a
+            );
+        }
+    }
+});
+
+machine.Fly = Object.derive({
+    constructor: function(x, y, pen, size) {
+        this.point = new point.RandomWalk(x, y);
+        this.prevPoint = {};
+        this.pen = pen;
+        this.size = size || 1;
+        this.half_size_neg = - this.size / 2;
+        this.color = new color.HSLA({
+            h: new value.RandomWalk(0),
+            l: new value.SineWave(300, 49, Math.random.range(600))
+                        .shift(new value.Const(50)),
+            s: new value.SineWaveAbs(600, 98, 25).shift(new value.Const(1)),
+            a: new value.Const(0.05)
+        });
+        this.rot = new value.Integral(new value.Const(140));
+    },
+    
+    run: function() {
+        this.prevPoint.x = this.point.x;
+        this.prevPoint.y = this.point.y;
+        if (Math.random() < 0.6) this.point.run();
+        this.color.run();
+        this.rot.run();
+    },
+    
+    draw: function() {
+        this.pen.strokeStyle = this.color.toString();
+        this.pen.fillStyle = this.color.toString();
+        this.pen.lineWidth = 4;
+        this.pen.save();
+        this.pen.translate(this.point.x, this.point.y);
+        this.pen.rotate(.001 * this.rot.value);
+        if (Math.random() < 0.5) {
+            this.pen.strokeRect(this.half_size_neg, this.half_size_neg, this.size, this.size);
+        } else { 
+            this.pen.fillRect(this.half_size_neg, this.half_size_neg, this.size, this.size);
+        }
+        this.pen.restore();
+    }
+});
+
+machine.CameraPoint = action.RunnerNode.derive({
+    /**
+     * needs target and env information. env need to have the width and height.
+     * target object need to be implement the krile interface.
+     */
+    constructor: function(target, env) {
+
+        PERIOD = FPS * 4;
+        this.DIR_MARGIN_DUR = FPS * 8;
+        this.DIR_MARGIN_X = 55;
+        this.DIR_MARGIN_Y = 55;
+        this._x = new value.SineWave(PERIOD, 4);
+        this._y = new value.SineWave(PERIOD, 4, PERIOD / 4);
+        this.__x = new value.CenteredBrownianMotion(0, 0.75, 0.05);
+        this.__y = new value.CenteredBrownianMotion(0, 0.75, 0.05);
+
+        this.runnerCheck();
+
+        this.env = env;
+        this.___x = new value.Const(0);
+        this.___y = new value.Const(0);
+        this.krile_state = -1;
+        this.earthQuake = 0;
+        this.setTarget(target);
+    },
+
+    Listening: {
+        EQ: function() {
+            this.toggleQuake();
+            
+        }
+    },
+
+    setTarget: function(target) {
+        this.target = target;
+    },
+
+    react: function() {
+        this.listen();
+    },
+
+    toggleQuake: function() {
+        this.earthQuake = (this.earthQuake + 2) % 10;
+        if (this.earthQuake === 8) {
+            this.target.env.bubble.message({head: "SC", comment: "やばい地震だ！"});
+        } else if (this.earthQuake === 6 ) {
+            this.target.env.bubble.message({head: "SC", comment: "すごい地震だ！"});
+        } else if (this.earthQuake > 0 ) {
+            this.target.env.bubble.message({head: "SC", comment: "地震だ！"});
+        } else {
+            this.target.env.bubble.message({head: "SC", comment: "？"});
+        }
+    },
+
+    run: function() {
+        if (this.krile_state !== this.target.state) {
+            x0 = this.___x.value;
+            y0 = this.___y.value;
+            this.krile_state = this.target.state;
+            x1 = this.krile_state == 2 ? -this.DIR_MARGIN_X : this.krile_state == 3 ? this.DIR_MARGIN_X : 0;
+            y1 = this.krile_state == 0 ? this.DIR_MARGIN_Y : this.krile_state == 1 ? -this.DIR_MARGIN_Y : 0;
+            this.___x = new value.Track([[x0, this.DIR_MARGIN_DUR], [x1, Infinity]]);
+            this.___y = new value.Track([[y0, this.DIR_MARGIN_DUR], [y1, Infinity]]);
+        }
+
+        this.runnersRun();
+        this.___x.run();
+        this.___y.run();
+        this.x = Math.floor(this.___x.value + this.target.x - this.env.width / 2 + this._x.value * 1 + this.__x.value * this.earthQuake);
+        this.y = Math.floor(this.___y.value + this.target.y - this.env.height / 2 + this._y.value * 1 + this.__y.value * this.earthQuake);
+    },
+
+    draw: function() {},
+});
+
+//
+// morph - shape or value complex which represents something
+//
+var morph = {};
+
+morph.Map = Object.derive({
+    constructor: function(dto) {
+        this.height = 0;
+        this.width = 0;
+        this._data = new Array();
+        if (typeof dto === "object") {
+            this.init(dto);
+        }
+    },
+
+    init: function(dto) {
+        if (typeof dto.textarea === "string") {
+            this.loadFromTextarea(dto.textarea);
+        } else if (typeof dto.string === "string") {
+            this.parseMapText(dto.string);
+        } else if (typeof dto.url == "string") {
+            this.loadFromURL(dto.url, dto.gate, dto.callback);
+        }
+    },
+
+    parseMapText: function(mapText) {
+        var div = document.createElement("div");
+        div.innerHTML = mapText;
+
+        // map chip information
+        map = div.getElementsByTagName('row');
+
+        var title;
+        if (title = div.getElementsByTagName('title')[0]) {
+            this.title = title.textContent;
+        }
+
+        // tile information
+        this.tiles = div.getElementsByTagName('tiles')[0];
+
+        // entry points infromation
+        this.enter = div.getElementsByTagName('enter')[0];
+        this.parseGate();
+
+        // exits information
+        this.exit = div.getElementsByTagName('exit')[0];
+
+        this.height = map.length;
+        this.width = 0;
+        this._data = new Array();
+        for (var i = 0; i < map.length; i++) {
+            this._data[i] = map[i].innerHTML;
+            this.width = Math.max(this.width, map[i].innerHTML.length)
+        }
+    },
+
+    loadFromTextarea: function(textareaId) {
+        var map = document.getElementById(textareaId);
+        var mapText = map.textContent;
+        this.parseMapText(mapText);
+    },
+
+    loadFromURL: function(url, gate, callback) {
+        var self = this;
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.onreadystatechange = function() {
+            if (this.readyState == 4) {
+                self.parseMapText(this.responseText)
+                typeof callback === "function" && callback.apply(undefined, [{
+                    title: self.title || url,
+                    pt: self.gate(gate)
+                }]);
+            }
+        };
+        xhr.send(null);
+        window.xhr = xhr;
+        this.mapText = xhr.responseText;
+    },
+
+    getMapText: function() {
+        var div = document.createElement('div');
+        var map = document.createElement('map');
+        for (var i = 0; i < this.height; i++) {
+            var row = document.createElement('row');
+            row.innerHTML = this._data[i];
+            map.appendChild(document.createTextNode('\n  '));
+            map.appendChild(row);
+        }
+        map.appendChild(document.createTextNode('\n'));
+        div.appendChild(map);
+        return div.innerHTML;
+    },
+
+    rangeOK: function(pt) {
+        if (pt.x < 0 || this.width <= pt.x) {
+            return false;
+        }
+        if (pt.y < 0 || this.height <= pt.y) {
+            return false;
+        }
+        return true;
+    },
+
+    gate: function(label) {
+        return this.gates[label];
+    },
+
+    parseGate: function() {
+        var gates = this.enter.getElementsByTagName('gate');
+        this.gates = {};
+        for (var i = 0; i < gates.length; i++) {
+            var gate = gates[i];
+            var label = gate.getAttribute('name');
+            this.gates[label] = this.calcGateOne(gate);
+        }
+    },
+
+    calcGateOne: function(gate) {
+        var x = Number(gate.getAttribute('x'));
+        x = x === NaN ? 0 : x;
+        var y = Number(gate.getAttribute('y'));
+        y = y === NaN ? 0 : y;
+        return {x: x, y: y};
+    },
+
+    passable: function(pt) {
+        return this.rangeOK(pt) && this._data[pt.y][pt.x] !== '1';
+    },
+
+    onEnter: function(pt) {
+        if (!this.rangeOK(pt)) {
+            return undefined;
+        }
+        var chr = this._data[pt.y][pt.x];
+        /*var tile = this.tiles.getElementsByClassName(chr)[0];
+        if (tile) {
+            return tile.getAttribute('onenter');
+        }*/
+        var exits = this.exit.getElementsByTagName('gate');
+        for (var i = 0; i < exits.length; i++) {
+            var exit = exits[i];
+            if (exit.getAttribute('name') === chr) {
+                x = exit.getAttribute('href').split('#', 2);
+                return {url: x[0], gate: x[1]};
+            }
+        }
+        return undefined;
+    }
+});
+
+morph.CommandQueue = Object.derive({
+    constructor: function(name, size) {
+        this.name = name;
+        this.size = size;
+    }
+});
+
+//
+// color - moving points in RGB-color spaces, HSL-color spaces or any other color spaces.
+//
+var color = {};
+
+color.RGB = action.RunnerNode.derive({
+    constructor: function() {
+        this.r = args.r;
+        this.g = args.g;
+        this.b = args.b;
+        this.runnerCheck();
+    },
+    
+    toString: function() {
+        return "#"+this.r.value.toString()+this.g.value.toString()+this.b.value.toString();
+    }
+});
+
+color.HSL = action.RunnerNode.derive({
+    constructor: function(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+        this.runnerCheck();
+    },
+    
+    toString: function() {
+        return "hsl("+this.h.value.toString()+","+this.s.value.toString()+"%,"+this.l.value.toString()+"%)";
+    }
+});
+
+color.HSLA = action.RunnerNode.derive({
+    constructor: function(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+        this.a = args.a;
+        this.runnerCheck();
+    },
+        
+    toString: function() {
+        return "hsla("+this.h.value.toString()+","+this.s.value.toString()+"%,"+this.l.value.toString()+"%,"+this.a.value.toString()+")";
+    }
+});
+
+color.Const = Object.derive({
+    constructor: function(color) {
+        this.color = color;
+    },
+    
+    run: function() {
+    },
+    
+    toString: function() {
+        return this.color.toString();
+    }
+});
+
+//
+// value - running 1-dimensional quantities.
+//
+var value = {};
+
+value.Runnable = Object.derive({
+    value: 0,
+    prevValue: null,
+    prevPrevValue: null,
+    
+    run: function() {
+        this.prevPrevValue = this.prevValue;
+        this.prevValue = this.value;
+        this.calcValue();
+        if (this._shift && typeof this._shift.run === "function") {
+            this._shift.run();
+            this.value += this._shift.value;
+        }
+    },
+    
+    calcValue: function() {
+    },
+
+    isFlat: function() {
+        return this.prevValue === this.value;
+    },
+
+    onFlat: function() {
+        return this.prevValue === this.value && this.prevValue !== this.prevPrevValue;
+    },
+
+    isChanging: function() {
+        return this.prevValue !== this.value;
+    },
+
+    onPhaseChange: function() {
+        return false;
+    },
+    
+    shift: function(runnable) {
+        if (typeof runnable === "number") {
+            runnable = new value.Const(runnable);
+        }
+        runnable._shift = this;
+        return runnable;
+    }
+});
+
+value.Integral = value.Runnable.derive({
+    constructor: function(obj, initial) {
+        this.obj = obj;
+        this.baseValue = initial || 0;
+    },
+    
+    calcValue: function() {
+        this.obj.run();
+        this.baseValue = this.baseValue + this.obj.value;
+        this.value = this.baseValue;
+    }
+});
+
+value.Const = value.Runnable.derive({
+    constructor: function(value) {
+        this.baseValue = value;
+        this.prevValue = null;
+    },
+    
+    calcValue: function() {
+        this.value = this.baseValue;
+    }
+});
+
+// tracking values, and loops
+value.Track = value.Runnable.derive({
+    constructor: function(array) { // ([[0, 50], [50]])
+        this.init(array);
+    },
+
+    init: function(array) {
+        if (typeof array === "undefined") {
+            array = [[0]];
+        } else if (typeof array == "number") {
+            array = [[array]];
+        }
+        this.values = array;
+        this.k = 0;
+        this.i = 0;
+        this.speed = null;
+        this.prevSpeed = null;
+        this._setNext();
+        this.value = this.ground;
+    },
+    
+    _setNext: function() {
+        this.pair = this.values[this.k];
+        this.ground = this.pair[0];
+        this.duration = this.pair[1] || Infinity;
+        this.k = (this.k + 1) % this.values.length;
+        this.nextPair = this.values[this.k];
+        this.nextValue = this.nextPair[0];
+        this.prevSpeed = this.speed;
+        this.speed = (this.nextValue - this.ground) / this.duration;
+    },
+
+    onPhaseChange: function() {
+        return this.prevSpeed !== null && this.i === 0; // exclude before first run case
+    },
+                
+    onPhaseChange2: function() {
+        return this.i === 0;
+    },
+                
+    calcValue: function() {
+        this.i += 1;
+        if (this.i >= this.duration) {
+            this.i = 0;
+            this._setNext();
+        }
+        this.baseValue = this.i * this.speed + this.ground;
+        this.value = this.baseValue;
+    }
+    
+});
+
+
+// base class for wave-like values
+value.Wave = value.Runnable.derive(function(__super__) {
+    return {
+        constructor: function(period, amplitude, initial) {
+            this.i = initial ? initial % period : 0;
+            this.period = period || 60;
+            this.amplitude = amplitude || 1;
+        },
+
+        onPhaseChange: function() {
+            return this.i === 0;
+        },
+        
+        run: function() {
+            this.i = (this.i + 1) % this.period
+            __super__.run.apply(this);
+        }
+    }
+});
+
+value.TriangleWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function() {
+            __super__.constructor.apply(this, arguments);
+            this.speed = this.amplitude * 4 / this.period;
+            this.calcValue();
+        },
+        
+        calcValue: function() {
+            if (this.i < this.period / 4) {
+                this.value = this.i * this.speed;
+            } else if (this.period / 4 <= this.i && this.i < this.period * 3 / 4) {
+                this.value = this.amplitude * 2 - this.i * this.speed;
+            } else {
+                this.value = -4 * this.amplitude + this.speed * this.i;
+            }
+        }
+    };
+});
+
+value.SineWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function(period, amplitude, initial) {
+            __super__.constructor.call(this, period, amplitude, initial);
+            this.freq = 2 * Math.PI / this.period;
+            this.calcValue();
+        },
+        
+        calcValue: function() {
+            return this.value = this.amplitude * Math.sin(this.freq * this.i);
+        }
+    };
+});
+
+value.SineWaveAbs = value.SineWave.derive(function(__super__) {
+    return {
+        calcValue: function() {
+            return this.value = Math.abs(__super__.calcValue.call(this));
+        }
+    };
+});
+
+value.RandomWalk = value.Runnable.derive({
+    constructor: function(initial) {
+        this.baseValue = initial || 0;
+    },
+    
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() > 0.5 ? 1 : -1);
+        return this.value = this.baseValue;
+    }
+});
+
+value.BrownianMotion = value.Runnable.derive({
+    constructor: function(initial, scale) {
+        this.baseValue = initial || 0;
+        this.scale = scale || 1;
+    },
+
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() * 2 - 1) * this.scale;
+        this.value = this.baseValue;
+    }
+});
+
+value.CenteredBrownianMotion = value.Runnable.derive({
+    constructor: function(initial, scale, k) {
+        this.initial = initial || 0;
+        this.baseValue = initial || 0;
+        this.scale = scale || 1;
+        this.k = k || 0.01
+    },
+
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() * 2 - 1) * this.scale;
+        this.baseValue -= (this.baseValue - this.initial) * this.k;
+        this.value = this.baseValue;
+    }
+});
+
+//
+// point - running 2-dimensional points.
+//
+var point = {};
+
+point.RandomWalk = Object.derive({
+    constructor: function(x, y) {
+        this.x = x;
+        this.y = y;
+    },
+    
+    run: function() {
+        this.calcValue();
+    },
+    
+    calcValue: function() {
+        if (Math.random() > 0.5) {
+            this.x += Math.random() > 0.5 ? 1 : -1;
+        } else {
+            this.y += Math.random() > 0.5 ? 1 : -1;
+        }
+    }
+});
+
+    //]]></script>
+    <style>
+
+      *{
+        margin:0;
+        padding:0;
+      }
+
+      div p {
+        font-size: normal;
+        font-weight: normal;
+      }
+
+      body * {
+        font-family: monospace;
+      }
+
+    </style>
+    <meta
+      http-equiv="content-type"
+      content="text/html; charset=utf-8"
+    />
+  </head>
+  <body onload="home.main();" bgcolor="black">
+    <div
+      id="container_main"
+      style="
+        top: 16px;
+        left: 152px;
+        position: absolute;
+        border: solid 16px hsl(206,50%,80%);
+        border-radius: 16px;
+        box-shadow: 5px 5px 5px #000;">
+      <div
+        id="container_main_inner"
+        style="position: absolute; overflow: hidden;">
+        <canvas
+          id="canvas_main"
+          width="300"
+          height="300"
+          style="position: absolute; left: 0; top: 0;">
+        </canvas>
+        <canvas
+          id="canvas_layer_map"
+          width="300"
+          height="300"
+          style="position: absolute; left: 0; top: 0;">
+        </canvas>
+        <canvas
+          id="canvas_layer_moogle"
+          width="300"
+          height="300"
+          style="position: absolute; left: 0; top: 0;">
+        </canvas>
+        <div
+          id="container_bubbler"
+          style="position: absolute; overflow: hidden; width: 100%; height: 100%;">
+        </div>
+        <canvas
+          id="canvas_layer_curtain"
+          width="300"
+          height="300"
+          style="position: absolute; left: 0; top: 0;">
+        </canvas>
+    
+        <div
+          id="container_fps"
+          style="
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 130px;
+            height: 130px;
+            overflow: hidden;
+            color: #000;
+            font-weight: normal;
+            background-color: hsl(206,80%,80%);
+            opacity: 0.8;
+            display: block;
+            border-bottom-right-radius: 15px;
+            box-shadow: 2px 2px 5px #000;">
+          <p style="
+            postion: absolute;
+            width: 85px;
+            text-align: center;
+            background-color: hsl(206,80%,80%);
+            box-shadow: 2px 2px 5px #000;
+            padding-right: 4px;
+            padding-bottom: 2px;
+            margin-bottom: 5px;
+            border-bottom-right-radius: 5px;">fps24.html</p>
+          <p id="fps-meter">-</p>
+          <p id="fps-monitor">cnt: -<br>fps: -</p>
+          <p id="frame-wait" style="white-space: nowrap;">wait: -</p>
+          <p id="custom-field">keys: -</p>
+        </div>
+      </div><!-- id="container_main_inner" -->
+      <div
+        id="overlay"
+        style="
+          position: absolute;
+          width: 20px;
+          height: 240px;
+          background: black;
+          color: white;
+          overflow: hidden">
+        THE END
+      </div>
+    </div><!-- id="container_main" -->
+
+  </body>
+</html>

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapml>
+  <title>Dark Corridor</title>
+  <tiles>
+    <sym class="1" passable="false" />
+    <sym class="0" />
+    <sym class="." />
+  </tiles>
+  <enter>
+    <gate name="A" x="5" y="1"/>
+    <gate name="B" x="5" y="47"/>
+  </enter>
+  <exit>
+    <gate name="A" href="map02.xml#Z"/>
+    <gate name="B" href="map02.xml#X"/>
+  </exit>
+  <row>....111....</row>
+  <row>....1A1....</row>
+  <row>....101....</row>
+  <row>1111101....</row>
+  <row>1000001....</row>
+  <row>1111101....</row>
+  <row>....1011111</row>
+  <row>....1000001</row>
+  <row>....1011101</row>
+  <row>....101.101</row>
+  <row>....101.101</row>
+  <row>....101.101</row>
+  <row>....101.111</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....1011111</row>
+  <row>....1000001</row>
+  <row>..111011111</row>
+  <row>..10001....</row>
+  <row>..11101....</row>
+  <row>....101....</row>
+  <row>....101....</row>
+  <row>....1B1....</row>
+  <row>....111....</row>
+</mapml>

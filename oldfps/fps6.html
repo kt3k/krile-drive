@@ -1,0 +1,173 @@
+<!doctype html>
+
+<html>
+
+<head>
+<title>fps6.html</title>
+
+<script>
+
+//
+// global elements
+//
+var pi = Math.PI;
+var sin = Math.sin;
+var cos = Math.cos;
+
+var doc = document;
+var byId = function(id) {
+    if (typeof id == 'string') { return doc.getElementById(id); }
+    return id;
+};
+
+//
+// main namespace (top)
+//
+var F = 16.66666;
+var home = {};
+
+home.main = function() {
+    this.sce0 = new home.Scene0;
+    this.fpsmeter = new home.FPSmeter;
+    this.pulse = new home.PulseWave(160, 9, 40);
+    this.wave = new home.SineWave(160, 9, 40);
+    this.fw = byId('frame-wait');
+    setInterval("home.run()", F);
+    setInterval("home.fpsmeter.writefps()", 1000);
+    return;
+};
+
+home.run = function () {
+    t = (new Date()).getTime();
+    this.fpsmeter.run();
+    this.sce0.run();
+    this.pulse.run();
+    this.wave.run();
+    diff = (new Date()).getTime() - t;
+    wait = F - diff;
+    this.fw.innerHTML = 'wait: ' + wait.toString() + ' msec';
+};
+
+home.FPSmeter = function() {
+    this.elem = byId("fps-meter");
+    this.elem_ = byId("fps-monitor");
+    this.i = 0;
+    return this;
+};
+home.FPSmeter.prototype = {};
+home.FPSmeter.prototype.run = function() {
+    this.i += 1;
+    this.elem.innerHTML = this.i.toString() + "<br>" + home.pulse.value.toString() + "<br>" + home.wave.value.toString();
+    this.elem.style.opacity = Math.abs(Math.sin(this.i/100))*0.7+0.2;
+    return;
+};
+home.FPSmeter.prototype.writefps = function() {
+    this.elem_.innerHTML = "fps: " + this.i.toString();
+    this.i = 0;
+    return;
+};
+
+home.Scene0 = function() {
+    this.age = 0;
+    this.k = 1;
+    this.alpha = 0.5;
+    this.image = new Image;
+    this.image.src = "dark.jpg";
+    this.dom = document.getElementById("indicator");
+    this.ctx = this.dom.getContext("2d");
+    this.pulse = new home.PulseWave(300, 1, 0);
+    this.wave = new home.SineWave(60, 1, 0);
+    this.wave_ = new home.SineWave(60, 1, 15);
+    this.lifespan = 120;
+    return this;
+};
+home.Scene0.prototype = {};
+home.Scene0.prototype.constructor = home.Scene0;
+home.Scene0.prototype.run = function() {
+    this.age += 1;
+    this.pulse.run();
+    this.wave.run();
+    this.wave_.run();
+    this.ctx.clearRect(0,0,300,300);
+    this.ctx.drawImage(this.image, 150 + this.wave.value * 100, 150 + this.wave_.value * 100 , 160, 90, 140, 210, 160, 90);
+    this.ctx.fillStyle = "hsla(" + this.age.toString() + ",25%,50%," + (this.pulse.value * 0. + 0.).toString() + ")";
+    this.ctx.fillRect(0,0,300,300);
+    if (this.age > this.lifespan) {
+        //this.run = function() {};
+    }
+};
+
+home.Wave = function(period, amplitude, initial) {
+    this.i = initial ? initial % period : 0;
+    this.period = period || 60;
+    this.amplitude = amplitude || 1;
+    this.calc_value();
+};
+home.Wave.prototype = {}
+home.Wave.prototype.run = function() {
+    this.i = (this.i + 1) % this.period
+    this.calc_value();
+};
+home.Wave.prototype.calc_value = function() {
+};
+
+home.newWave = function() {
+    var c = function() {
+        home.Wave.apply(this, arguments);
+    }
+    c.prototype = new home.Wave();
+    return c;
+};
+
+home.PulseWave = function() {
+    home.Wave.apply(this, arguments);
+    this.speed = this.amplitude * 4 / this.period;
+};
+home.PulseWave.prototype = new home.Wave();
+home.PulseWave.prototype.calc_value = function() {
+    if (this.i < this.period / 4) {
+        this.value = this.i * this.speed;
+    } else if (this.period / 4 <= this.i && this.i < this.period * 3 / 4) {
+        this.value = this.amplitude * 2 - this.i * this.speed;
+    } else {
+        this.value = -4 * this.amplitude + this.speed * this.i;
+    }
+};
+
+home.SineWave = function() {
+    home.Wave.apply(this, arguments);
+    this.freq = 2 * Math.PI / this.period;
+};
+home.SineWave.prototype = new home.Wave();
+home.SineWave.prototype.calc_value = function() {
+    this.value = this.amplitude * sin(this.freq * this.i);
+};
+</script>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+}
+
+div p {
+    font-size: normal;
+    font-weight: normal;
+}
+</style>
+
+</head>
+
+<body onload="home.main();">
+
+<canvas id="indicator" width="300" height="300" style="position: absolute; left: 0; top: 0;"></canvas>
+
+<div style="position: absolute; left: 0; right: 0;">
+  <p id="fps-meter">0</p>
+  <p id="fps-monitor">fps: -</p>
+  <p id="frame-wait">wait: msec</p>
+</div>
+
+</body>
+
+</html>

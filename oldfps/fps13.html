@@ -1,0 +1,645 @@
+<!doctype html>
+<html>
+  <head>
+    <title>fps13.html</title>
+    <script style="text/javascript" src="my_globals.js"></script>
+    <script>
+//
+// global elements
+//
+Math.random.choice = function(array) {
+    return array[parseInt(this() * array.length)];
+};
+
+Math.random.range = function(n){
+    return parseInt(this() * n);
+};
+
+var parsePx = function(number) {
+    return parseInt(number).toString() + "px";
+};
+
+Number.prototype.toPx = function() {
+    return parsePx(this);
+};
+
+document.byId = document.getElementById;
+
+//
+// event settings
+//
+mixin(document, {
+    onkeydown: function(e) {home.changeKey(e);},
+    onkeyup: function(e) {home.changeKey(e);}
+});
+
+//
+// home - main namespace
+//
+var FRAME_RATE = 30;
+
+var home = {
+
+    SCREEN_WIDTH: 512,
+    SCREEN_HEIGHT: 512,
+    
+    FRAME_RATE: FRAME_RATE,
+    FRAME_LENGTH: 1000/FRAME_RATE,
+
+    main: function() {
+        this.fwmeter = new action.FWMeter(home.FRAME_LENGTH);
+        this.fpsmeter = new action.FPSMeter(); 
+        this.kdump = new action.KeyDumper();
+
+        this.sce0 = new action.Scene0()
+        
+        this.toggleMain();
+
+        setInterval("home.fpsmeter.writefps()", 1000);
+    },
+    
+    toggleMain: function() {
+        if (this.mainHandle) {
+            clearInterval(this.mainHandle);
+            delete this.mainHandle;
+        } else {
+            this.mainHandle = setInterval("home.run()", home.FRAME_LENGTH);
+        }
+    },
+    
+    run: function () {
+        this.fwmeter.start();
+
+        this.fpsmeter.run();
+        this.kdump.run();
+        
+        this.sce0.run();
+
+        this.fwmeter.stop();
+    },
+    
+    keyInput: [0, 0, 0, 0, 0], // left, right, up, down, start/stop
+    changeKey: function(event) {
+        var to = event.type === "keydown" ? 1 : 0;
+        switch (event.keyCode) {
+            case 65: // A
+            case 72: // H
+            case 37: // [left key]
+                home.keyInput[0] = to;
+                break;
+            case 87: // W
+            case 75: // K
+            case 38: // [up key]
+                home.keyInput[2] = to;
+                break;
+            case 68: // D
+            case 76: // L
+            case 39: // [right key]
+                home.keyInput[1] = to;
+                break;
+            case 83: // S
+            case 74: // J
+            case 40: // [down key]
+                home.keyInput[3] = to;
+                break;
+            case 32: // [space]
+                home.keyInput[4] = to;
+                if (to) home.toggleMain();
+                event.preventDefault();
+                break;
+        }
+    }
+};
+
+var action = {};
+
+action.ActionList = Object.derive({
+    constructor: function(action_list) {
+        this.actions = action_list;
+    },
+    
+    run: function() {
+        for (var i in this.actions) {
+            this.actions[i].run();
+        }
+    }
+});
+
+action.RunnerNode = Object.derive({
+    constructor: function(obj) {
+        this.customConstructor(obj);
+        this.runnersCheck();
+    },
+    
+    customConstructor: function(obj) {
+    },
+    
+    runnerCheck: function() {
+        this.runners = new Array();
+        for (var i in this) {
+            if (typeof this[i].run === "function") {
+                this.runners.push(this[i]);
+            }
+        }
+    },
+    
+    run: function() {
+        this.customRun();
+        this.runnersRun();
+    },
+    
+    customRun: function() {
+    },
+    
+    runnersRun: function() {
+        for (var i in this.runners) {
+            this.runners[i].run();
+        }
+    }
+});
+
+action.FWMeter = Object.derive({
+    constructor: function(frame_length) {
+        this.dom = byId("frame-wait");
+        this.frame_length = frame_length;
+        this.t = 0;
+    },
+    
+    start: function() {
+        this.t = (new Date).getTime();
+    },
+    
+    stop: function() {
+        var diff = (new Date()).getTime() - this.t;
+        var wait = this.frame_length - diff;
+        this.dom.innerHTML = 'wait: ' + wait.toPrecision(7).toString();        
+    }
+});
+    
+action.FPSMeter = Object.derive({
+    constructor: function() {
+        this.elem = byId("fps-meter");
+        this.elem_ = byId("fps-monitor");
+        this.pulse = new value.TriangleWave(160, 9, 40);
+        this.wave = new value.SineWaveAbs(160, 9, 40);
+        this.i = 0;
+    },
+    
+    run: function() {
+        this.i += 1;
+        this.pulse.run();
+        this.wave.run();
+        this.elem.innerHTML = this.i.toString() + "<br>" + this.pulse.value.toPrecision(7).toString() + "<br>" + this.wave.value.toPrecision(7).toString();
+        this.elem.style.opacity = Math.abs(Math.sin(this.i/100))*0.7+0.2;
+    },
+    
+    writefps: function() {
+        this.elem_.innerHTML = "fps: " + this.i.toString();
+        this.i = 0;
+    }
+});
+
+action.Scene0 = action.RunnerNode.derive({
+    constructor: function() {
+        this.age = 0;
+        this.dom_container = byId("container_main");
+        this.dom_container.style.width = home.SCREEN_WIDTH.toPx();;
+        this.dom_container.style.height = home.SCREEN_HEIGHT.toPx();
+        this.dom = document.getElementById("canvas_main");
+        this.dom.width = home.SCREEN_WIDTH;
+        this.dom.height = home.SCREEN_HEIGHT;
+        this.ctx = this.dom.getContext("2d");
+        this.wave = new value.TriangleWave(60, 1, 0);
+        this.wave_ = new value.SineWave(60, 1, 15);
+        this.x = 140;
+        this.y = 210;
+        this.xy_speed = 1;
+        FLY_MAX = 100;
+        this.flies = new Array(FLY_MAX);
+        for (var i=0; i<FLY_MAX; i++) {
+            this.flies[i] = new action.Fly(Math.random.range(home.SCREEN_WIDTH), Math.random.range(home.SCREEN_HEIGHT), this.ctx);
+        }
+        this.rect = new morph.Rect({
+            x: new value.SineWave(240, 120, 0).shift(new value.Const(220)),
+            y: new value.SineWave(1200, 120, 15).shift(new value.RandomWalk(220)),
+            w: new value.Const(200),
+            h: new value.RandomWalk(400),
+            color: new color.HSL({
+                h: new value.Const(10),
+                s: (new value.SineWave(120, 50)).shift(new value.Const(50)),
+                l: (new value.SineWave(120, 10)).shift(new value.Const(30))
+            }),
+            pen: this.ctx
+        });
+        this.left = new value.SineWave(1200, 256, 45).shift(new value.Const(256));
+        this.narrator = new action.Narrator();
+        this.runnerCheck();
+    },
+    
+    run: function() {
+        this.age += 1;
+        this.runnersRun();
+        if (home.keyInput[0]) this.x -= this.xy_speed;
+        if (home.keyInput[1]) this.x += this.xy_speed;
+        if (home.keyInput[2]) this.y -= this.xy_speed;
+        if (home.keyInput[3]) this.y += this.xy_speed;
+        if (home.keyInput[0] || home.keyInput[1] || home.keyInput[2] || home.keyInput[3]) {
+            byId("div_button").style.opacity = 0.3;
+        } else {
+            byId("div_button").style.opacity = 1;
+        }        
+        //this.ctx.clearRect(0, 0, home.SCREEN_WIDTH, home.SCREEN_HEIGHT);
+        this.ctx.fillStyle = "#cc0";
+        this.ctx.fillRect(this.x, this.y ,160, 90);
+        this.ctx.fillStyle = "hsla(" + this.age.toString() + ",75%, 50%, 0.5)";
+        this.ctx.fillRect(200,0,30,30);
+        for (var i in this.flies) {
+            this.flies[i].run();
+            this.flies[i].draw();
+        }
+        this.dom_container.style.left = this.left.value.toPx();
+        //this.rect.draw();
+    }
+});
+
+action.KeyDumper = Object.derive({
+    constructor: function() {
+        this.age = 0;
+        this.x = 200;
+        this.y = 0;
+        this.dom = byId("custom-field");
+    },
+    
+    run: function() {
+        this.age += 1;
+        this.dom.innerHTML = home.keyInput.toString();
+    }
+});
+
+action.Narrator = Object.derive({
+    constructor: function() {
+        this.age = 0;
+        this.PERIOD = 240;
+        this.alpha = new value.SineWaveAbs(this.PERIOD, 2);
+        this.dom = document.createElement("div");
+        this.dom.style.position = "absolute";
+        this.dom.style.top = "180px";
+        this.dom.style.left = "5px";
+        this.dom.style.opacity = "0.5";
+        this.dom.style.backgroundColor = "orange";
+        byId("container_main").appendChild(this.dom);
+        this.setdoc();
+    },
+    
+    setdoc: function(doc) {
+        this.doc = byId("document_narration").innerHTML.trim().split("\n");
+        this.dom.innerHTML = this.doc[0];
+    },
+    
+    run: function() {
+        this.age += 1;
+        this.alpha.run();
+        this.dom.style.opacity = (this.alpha.value-0.5).toString();
+        if (this.age * 2 % this.PERIOD === 0) {
+            this.dom.innerHTML = this.doc[this.age * 2 / this.PERIOD % this.doc.length];
+        }
+    }
+});
+
+action.Fly = Object.derive({
+    constructor: function(x, y, pen, size) {
+        this.point = new point.RandomWalk(x, y);
+        this.prevPoint = {};
+        this.pen = pen;
+        this.size = size || 1;
+        this.color = new color.HSL({
+            h: new value.RandomWalk(0),
+            l: new value.SineWave(600, 25, Math.random.range(600)).shift(new value.RandomWalk(25)),
+            s: new value.Const(100)
+        });
+    },
+    
+    run: function() {
+        this.prevPoint.x = this.point.x;
+        this.prevPoint.y = this.point.y;
+        this.point.run();
+        this.color.run();
+        this.color.run();
+    },
+    
+    draw: function() {
+        this.pen.fillStyle = this.color.toString();
+        this.pen.fillRect(this.prevPoint.x, this.prevPoint.y, this.size, this.size);
+        this.pen.fillStyle = this.color.toString();
+        this.pen.fillRect(this.point.x, this.point.y, this.size, this.size);
+    }
+});
+
+//
+// morph definitions, morph means any shape or value complex which represent any entity and render its body on a provided canvas.
+//
+var morph = {};
+
+morph.Rect = Object.derive({
+    constructor: function(args) {
+        this.i = 0;
+        this.runners = [];
+        for (var key in args) {
+            if (typeof args[key].run === "function") {
+                this.runners.push(args[key]);
+            }
+            this[key] = args[key];
+        }
+    },
+    
+    run: function() {
+        for (var i in this.runners) {
+            this.runners[i].run();
+        }
+    },
+    
+    draw: function() {
+        this.pen.fillStyle = this.color.toString();
+        this.pen.fillRect(this.x.value - this.w.value / 2, this.y.value - this.h.value / 2, this.w.value, this.h.value);
+    }
+});
+
+//
+// color definitions, a color means a point in the RGB color space, a point in the HSL color space or a point in any other color space.
+//
+var color = {};
+
+color.RGB = Object.derive({
+    constructor: function() {
+        this.r = args.r;
+        this.g = args.g;
+        this.b = args.b;
+    },
+    
+    run: function() {
+        this.r.run();
+        this.g.run();
+        this.b.run();
+    },
+    
+    toString: function() {
+        return "#"+this.r.value.toString()+this.g.value.toString()+this.b.value.toString();
+    }
+});
+
+color.HSL = Object.derive({
+    constructor: function(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+    },
+    
+    run: function() {
+        this.h.run();
+        this.s.run();
+        this.l.run();
+    },
+    
+    toString: function() {
+        return "hsl("+this.h.value.toString()+","+this.s.value.toString()+"%,"+this.l.value.toString()+"%)";
+    }
+});
+
+color.Const = Object.derive({
+    constructor: function(color) {
+        this.color = color;
+    },
+    
+    run: function() {
+    },
+    
+    toString: function() {
+        return this.color.toString();
+    }
+});
+
+//
+// value definitions, 'value' means 1-dimensional quantity which changes its value at any frame it runs.
+//
+var value = {};
+
+value.Runnable = Object.derive({
+    value: 0,
+    
+    run: function() {
+        this.calc_value();
+        if (this._shift && typeof this._shift.run === "function") {
+            this._shift.run();
+            this.value += this._shift.value;
+        }
+    },
+    
+    calc_value: function() {
+    },
+    
+    shift: function(runnable) {
+        runnable._shift = this;
+        return runnable;
+    }
+});
+
+value.Const = value.Runnable.derive({
+    constructor: function(value) {
+        this.raw_value = value;
+    },
+    
+    calc_value: function() {
+        this.value = this.raw_value;
+    }
+});
+
+value.Track = value.Runnable.derive(function(__super__) {
+     return {
+        constructor: function() { // ([0, 50], [ 
+            this.values = arguments;
+            this.k = 0;
+            this._setNext();
+        },
+        
+        _setNext: function() {
+            this.pair = this.values[this.k];
+            this.ground = this.pair[0];
+            this.duration = this.pair[1];
+            this.k = (this.k + 1) % this.values.length;
+            this.nextPair = this.values[this.k];
+            this.nextValue = this.nextPair[0];
+            this.speed = (this.nextValue - this.ground) / this.duration;
+        },
+                
+        calc_values: function() {
+            if (this.i >= this.duration) {
+                this._setNext();
+            }
+            this.baseValue = this.i * this.speed + this.ground;
+            this.value = this.baseValue;
+        }
+    }
+});
+
+value.Wave = value.Runnable.derive(function(__super) {
+    return {
+        constructor: function(period, amplitude, initial) {
+            this.i = initial ? initial % period : 0;
+            this.period = period || 60;
+            this.amplitude = amplitude || 1;
+        },
+        
+        run: function() {
+            this.i = (this.i + 1) % this.period
+            __super.run.apply(this);
+        }
+    }
+});
+
+value.TriangleWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function() {
+            __super__.constructor.apply(this, arguments);
+            this.speed = this.amplitude * 4 / this.period;
+            this.calc_value();
+        },
+        
+        calc_value: function() {
+            if (this.i < this.period / 4) {
+                this.value = this.i * this.speed;
+            } else if (this.period / 4 <= this.i && this.i < this.period * 3 / 4) {
+                this.value = this.amplitude * 2 - this.i * this.speed;
+            } else {
+                this.value = -4 * this.amplitude + this.speed * this.i;
+            }
+        }
+    };
+});
+
+value.SineWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function(period, amplitude, initial) {
+            __super__.constructor.call(this, period, amplitude, initial);
+            this.freq = 2 * Math.PI / this.period;
+            this.calc_value();
+        },
+        
+        calc_value: function() {
+            return this.value = this.amplitude * Math.sin(this.freq * this.i);
+        }
+    };
+});
+
+value.SineWaveAbs = value.SineWave.derive(function(__super__) {
+    return {
+        calc_value: function() {
+            return this.value = Math.abs(__super__.calc_value.call(this));
+        }
+    };
+});
+
+value.RandomWalk = value.Runnable.derive({
+    constructor: function(initial) {
+        this.raw_value = initial || 0;
+    },
+    
+    calc_value: function() {
+        this.raw_value += Math.random() > 0.5 ? 1 : -1;
+        return this.value = this.raw_value;
+    }
+});
+
+//
+// point definitions, point means 2-dimensional quantity which changes its value at any frame they run.
+//
+var point = {};
+
+point.RandomWalk = Object.derive({
+    constructor: function(x, y) {
+        this.x = x;
+        this.y = y;
+    },
+    
+    run: function() {
+        this.calc_value();
+    },
+    
+    calc_value: function() {
+        if (Math.random() > 0.5) {
+            this.x += Math.random() > 0.5 ? 1 : -1;
+        } else {
+            this.y += Math.random() > 0.5 ? 1 : -1;
+        }
+    }
+});
+
+    </script>
+    <style>
+*{
+    margin:0;
+    padding:0;
+}
+
+div p {
+    font-size: normal;
+    font-weight: normal;
+}
+    </style>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  </head>
+  <body onload="home.main();" bgcolor="black">
+    <div id="container_main" style="position: absolute; width: 1024px; height: 512px; background-color: #001; ">
+      <canvas id="canvas_main" width="300" height="300" style="position: absolute; left: 0; top: 0;"></canvas>
+      <div id="div_button" style="position: absolute; left: 315px; top: 115px; ">
+        <button style="width: 170px; height: 170px; background: #afb; border: solid 1px #6b7; color: #495; " onclick="home.toggleMain();">Stop / Restart</button>
+      </div>
+    </div>
+      <div style="position: absolute; left: 0; top: 0; background-color: white; opacity: 0.5">
+        <p id="fps-meter">0</p>
+        <p id="fps-monitor">fps: -</p>
+        <p id="frame-wait">wait: msec</p>
+        <p id="custom-field"></p>
+      </div>
+    <textarea style="display: none; " id="document_narration">
+When I find myself in times of trouble
+Mother Mary comes to me
+Speaking words of wisdom, let it be.
+And in my hour of darkness
+She is standing right in front of me
+Speaking words of wisdom, let it be.
+Let it be, let it be.
+Let it be, let it be.
+Whisper words of wisdom, let it be.
+And when the broken hearted people
+Living in the world agree,
+There will be an answer, let it be.
+For though they may be parted there is
+Still a chance that they will see
+There will be an answer, let it be.
+Let it be, let it be.
+Let it be, let it be.
+Yeah, There will be an answer, let it be.
+Let it be, let it be.
+Let it be, let it be.
+Whisper words of wisdom, let it be.
+Let it be, let it be.
+Let it be, let it be.
+There will be an answer, let it be.
+Let it be, let it be.
+Let it be, let it be.
+There will be an answer, let it be.
+And when the night is cloudy,
+There is still a light that shines on me.
+Shine until tomorrow, let it be.
+I wake up to the sound of music
+Mother Mary comes to me
+Speaking words of wisdom, let it be.
+Let it be, let it be.
+Let it be, let it be.
+There will be no sorrow, let it be.
+Let it be, let it be.
+Let it be, let it be.
+Whisper words of wisdom, let it be. hoooo' hoooo' 
+    </textarea>
+  </body>
+</html>

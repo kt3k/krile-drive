@@ -1,0 +1,100 @@
+<!doctype html>
+
+<html>
+
+<head>
+<title>fps3.html</title>
+
+<script>
+
+var top_ = {};
+
+top_.main = function(){
+    this.sce0 = new Scene0;
+    this.fpsmeter = new FPSmeter;
+    setInterval("top_.run()", 16.6666);
+    setInterval("top_.fpsmeter.writefps()", 1000);
+    return;
+}
+
+top_.run = function (){
+    this.fpsmeter.run();
+    this.sce0.run();
+}
+
+var FPSmeter = function(){
+    this.elem = document.getElementById("fps-meter");
+    this.elem_ = document.getElementById("fps-monitor");
+    this.i = 0;
+    return this;
+}
+FPSmeter.prototype = {};
+FPSmeter.prototype.run = function(){
+    this.i += 1;
+    this.elem.innerHTML = this.i.toString();
+    return;
+}
+FPSmeter.prototype.writefps = function(){
+    this.elem_.innerHTML = "fps: " + this.i.toString();
+    this.i = 0;
+    return;
+}
+
+function Scene0(){
+    this.i = 0;
+    this.k = 1;
+    this.alpha = 0.5;
+    this.dom = document.getElementById("indicator");
+    this.ctx = this.dom.getContext("2d");
+    this.ctx.fillStyle = "rgba(17,85,136, 0.4)";
+    this.ctx.fillRect(0, 0, 300, 300);
+    return this;
+}
+Scene0.prototype = {};
+Scene0.prototype.run = function(){
+    this.ctx.clearRect(0,0,300,300);
+    if(this.k){
+        this.alpha += 0.03;
+    } else {
+        this.alpha -= 0.03;
+    }
+    if(this.alpha > 1.2){
+        this.alpha = 1.2;
+        this.k = 0
+    }
+    if(this.alpha < -0.2){
+        this.alpha = -0.2;
+        this.k = 1;
+    }
+    this.ctx.fillStyle = "rgba(17,85,136," + this.alpha.toString() + ")";
+    this.ctx.fillRect(0,0,300,300);
+}
+
+</script>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+}
+
+div p {
+    font-size: normal;
+    font-weight: normal;
+}
+</style>
+
+</head>
+
+<body onload="top_.main();">
+
+<div style="position: absolute; left: 0; right: 0;">
+  <p id="fps-meter">0</p>
+  <p id="fps-monitor">fps: -</p>
+</div>
+
+<canvas id="indicator" width="300" height="300" style="position: absolute; left: 0; top: 0;"></canvas>
+
+</body>
+
+</html>

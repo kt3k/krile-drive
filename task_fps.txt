@@ -1,0 +1,19 @@
+# task_fps.txt
+
+TODOs:
+- task queue should be implmented.
+    - the operation that don't need to be executed imedeately, like nodeAliveCheck()'ing , should be operated when
+      the game is not busy.
+
+closed TODOs:
+- krile-bubble integration. ok:
+    - now krile has 'bubbles' node, it has a list of bubbles and manage them.
+    - bubble.knockUp() is defined.
+    - machine.List.bulkMessage(ms) is defined.
+- make doms removable.:
+    - created __hasDom__ flag, and dom removal in die method. ok:
+        if dom is HTMLElement, then dom.parentElement.removeChild(dom), it remove the dom from the parent, easy.
+- krile's 'react' method problem. make the 'kim' access inside the method. - implemented getInput method, clean ok.
+- implemete disappearance in view and in memory - half ok.
+- make everything removable - half ok:
+    solution: implement action.BaseRunner - everything is in Runner Node Tree.

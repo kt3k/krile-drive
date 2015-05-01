@@ -1,0 +1,332 @@
+<!doctype html>
+<html>
+  <head>
+    <title>fps10.html</title>
+    <script>
+//
+// global elements
+//
+var byId = function(id) {
+    if (typeof id == 'string') { return document.getElementById(id); }
+    return id;
+};
+
+var mixin = function(target, source) {
+    for (var i in source) {
+        target[i] = source[i];
+    }
+}
+
+if (typeof String.prototype.trim === "undefined") {
+    String.prototype.trim = function() {
+        return this.replace(/^\s+|\s+$/g, "");
+    }
+}
+
+Function.prototype.derive = function(extension){
+    var __super__ = this.prototype;
+    var x, y, z;
+    var obj = (typeof extension === "function" ? extension(__super__) : extension);
+    x = function() {};
+    x.prototype = __super__;
+    y = obj.hasOwnProperty("constructor") ? obj.constructor : function() {__super__.constructor.apply(this, arguments);};
+    y.__super__ = __super__;
+    y.prototype = z = new x;
+    z.constructor = y;
+    mixin(y.prototype, obj);
+    return y;
+};
+
+var derive = function(__superclass__) {
+    var __super__ = __superclass__.prototype;
+    return function(extension) {
+        var x, y, z;
+        var obj = (typeof extension === "function" ? extension(__super__) : extension);
+        x = function() {};
+        x.prototype = __super__;
+        y = obj.hasOwnProperty("constructor") ? obj.constructor : function() {__super__.constructor.apply(this, arguments);};
+        y.__super__ = __super__;
+        y.prototype = z = new x;
+        z.constructor = y;
+        mixin(y.prototype, obj);
+        return y;
+    }
+}
+
+//
+// key settings
+//
+document.onkeydown = function(e) {
+    home.changeKey(e.keyCode, 1);
+};
+
+document.onkeyup = function(e) {
+    home.changeKey(e.keyCode, 0);
+};
+
+//
+// home - main namespace
+//
+var home = {
+    SCREEN_WIDTH: 1024,
+    SCREEN_HEIGHT: 512,
+    FRAME_RATE: 30,
+    FRAME_LONG: 1000/30,
+
+    main: function() {
+        this.sce0 = new home.Scene0();
+        this.fpsmeter = new home.FPSmeter();
+        this.pulse = new home.TriangleWave(160, 9, 40);
+        this.wave = new home.SineWaveAbs(160, 9, 40);
+        this.fw = byId('frame-wait');
+        this.kd = new home.KeyDumper();
+        this.narrator = new home.Narrator;
+        this.toggleMain();
+        setInterval("home.fpsmeter.writefps()", 1000);
+        return;
+    },
+    
+    toggleMain: function() {
+        if (this.mainHandle) {
+            clearInterval(this.mainHandle);
+            delete this.mainHandle;
+        } else {
+            this.mainHandle = setInterval("home.run()", home.FRAME_LONG);
+        }
+    },
+    
+    run: function () {
+        t = (new Date()).getTime();
+        this.fpsmeter.run();
+        this.sce0.run();
+        this.pulse.run();
+        this.wave.run();
+        this.kd.run();
+        this.narrator.run();
+        diff = (new Date()).getTime() - t;
+        wait = home.FRAME_LONG - diff;
+        this.fw.innerHTML = 'wait: ' + wait.toString() + ' msec';
+    },
+    
+    keyInput: [0, 0, 0, 0, 0], // left, right, up, down, start/stop
+    changeKey: function(which, to) {
+        switch (which) {
+            case 65:
+            case 37:
+                home.keyInput[0] = to;
+                break;
+            case 87:
+            case 38:
+                home.keyInput[2] = to;
+                break;
+            case 68:
+            case 39:
+                home.keyInput[1] = to;
+                break;
+            case 83:
+            case 40:
+                home.keyInput[3] = to;
+                break;
+            case 32:
+                home.keyInput[4] = to;
+                if (to) home.toggleMain();
+                break;
+        }
+    }
+}
+    
+home.FPSmeter = Object.derive({
+    constructor: function() {
+        this.elem = byId("fps-meter");
+        this.elem_ = byId("fps-monitor");
+        this.i = 0;
+    },
+    
+    run: function() {
+        this.i += 1;
+        this.elem.innerHTML = this.i.toString() + "<br>" + home.pulse.value.toString() + "<br>" + home.wave.value.toString();
+        this.elem.style.opacity = Math.abs(Math.sin(this.i/100))*0.7+0.2;
+    },
+    
+    writefps: function() {
+        this.elem_.innerHTML = "fps: " + this.i.toString();
+        this.i = 0;
+    }
+});
+
+home.Scene0 = Object.derive({
+    constructor: function() {
+        this.age = 0;
+        this.k = 1;
+        this.alpha = 0.5;
+        this.image = new Image;
+        this.image.src = "dark.jpg";
+        this.dom = document.getElementById("canvas_main");
+        this.dom.width = home.SCREEN_WIDTH;
+        this.dom.height = home.SCREEN_HEIGHT;
+        this.ctx = this.dom.getContext("2d");
+        this.pulse = new home.TriangleWave(300, 1, 0);
+        this.wave = new home.SineWave(60, 1, 0);
+        this.wave_ = new home.SineWave(60, 1, 15);
+        this.x = 140;
+        this.y = 210;
+        this.xy_speed = 5;
+    },
+    
+    run: function() {
+        this.age += 1;
+        this.pulse.run();
+        this.wave.run();
+        this.wave_.run();
+        if (home.keyInput[0]) this.x -= this.xy_speed;
+        if (home.keyInput[1]) this.x += this.xy_speed;
+        if (home.keyInput[2]) this.y -= this.xy_speed;
+        if (home.keyInput[3]) this.y += this.xy_speed;
+        if (home.keyInput[0] || home.keyInput[1] || home.keyInput[2] || home.keyInput[3]) {
+            byId("div_button").style.left = "400px";
+        }
+        this.ctx.clearRect(0, 0, home.SCREEN_WIDTH, home.SCREEN_HEIGHT);
+        this.ctx.drawImage(this.image, 150 + this.wave.value * 100, 150 + this.wave_.value * 100 , 160, 90, this.x, this.y, 160, 90);
+        this.ctx.fillStyle = "hsla(" + this.age.toString() + ",75%,50%," + (this.pulse.value * 0.0 + 1).toString() + ")";
+        this.ctx.fillRect(200,0,30,30);
+    }
+});
+
+home.KeyDumper = Object.derive({
+    constructor: function() {
+        this.age = 0;
+        this.x = 200;
+        this.y = 0;
+        this.dom = byId("custom-field");
+    },
+    
+    run: function() {
+        this.age += 1;
+        this.dom.innerHTML = home.keyInput.toString();
+    }
+});
+
+home.Narrator = Object.derive({
+    constructor: function() {
+        this.age = 0;
+        this.PERIOD = 240;
+        this.alpha = new home.SineWaveAbs(this.PERIOD, 2);
+        this.dom = document.createElement("div");
+        this.dom.style.position = "absolute";
+        this.dom.style.top = "180px";
+        this.dom.style.left = "5px";
+        this.dom.style.opacity = "0.5";
+        document.body.appendChild(this.dom);
+        this.setdoc();
+    },
+    
+    setdoc: function(doc) {
+        this.doc = ((byId("document_narration").innerHTML).trim()).split("\n");
+        this.dom.innerHTML = this.doc[0];
+        this.limit = 180;
+    },
+    
+    run: function() {
+        this.age += 1;
+        this.alpha.run();
+        this.dom.style.opacity = (this.alpha.value-0.5).toString();
+        if (this.age * 2 % this.PERIOD === 0) {
+            this.dom.innerHTML = this.doc[this.age * 2 / this.PERIOD % this.doc.length];
+        }
+    }
+});
+
+home.Wave = Object.derive({
+    constructor: function(period, amplitude, initial) {
+        this.i = initial ? initial % period : 0;
+        this.period = period || 60;
+        this.amplitude = amplitude || 1;
+    },
+    
+    run: function() {
+        this.i = (this.i + 1) % this.period
+        this.calc_value();
+    },
+    
+    calc_value: function() {
+    }
+});
+
+home.TriangleWave = home.Wave.derive(function(__super__) {
+    return {
+        constructor: function() {
+            __super__.constructor.apply(this, arguments);
+            this.speed = this.amplitude * 4 / this.period;
+            this.calc_value();
+        },
+        
+        calc_value: function() {
+            if (this.i < this.period / 4) {
+                this.value = this.i * this.speed;
+            } else if (this.period / 4 <= this.i && this.i < this.period * 3 / 4) {
+                this.value = this.amplitude * 2 - this.i * this.speed;
+            } else {
+                this.value = -4 * this.amplitude + this.speed * this.i;
+            }
+        }
+    };
+});
+
+home.SineWave = home.Wave.derive(function(__super__) {
+    return {
+        constructor: function(period, amplitude, initial) {
+            __super__.constructor.call(this, period, amplitude, initial);
+            this.freq = 2 * Math.PI / this.period;
+            this.calc_value();
+        },
+        
+        calc_value: function() {
+            return this.value = this.amplitude * Math.sin(this.freq * this.i);
+        }
+    };
+});
+
+home.SineWaveAbs = home.SineWave.derive(function(__super__) {
+    return {
+        calc_value: function() {
+            return this.value = Math.abs(__super__.calc_value.call(this));
+        }
+    };
+});
+
+    </script>
+    <style>
+*{
+    margin:0;
+    padding:0;
+}
+
+div p {
+    font-size: normal;
+    font-weight: normal;
+}
+    </style>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  </head>
+  <body onload="home.main();">
+    <canvas id="canvas_main" width="300" height="300" style="position: absolute; left: 0; top: 0;"></canvas>
+    <div style="position: absolute; left: 0; top: 0;">
+      <p id="fps-meter">0</p>
+      <p id="fps-monitor">fps: -</p>
+      <p id="frame-wait">wait: msec</p>
+      <p id="custom-field"></p>
+    </div>
+    <div id="div_button" style="position: absolute; left: 315px; top: 115px; ">
+      <button style="width: 170px; height: 170px; background: #afb; border: solid 1px #6b7; color: #495; " onclick="home.toggleMain();">Stop / Restart</button>
+    </div>
+    <textarea style="display: none; " id="document_narration">
+Hi,
+I am Thomas Regan.
+I am now living in Latvia,
+an east Europian Country.
+I am an agent of certain organization
+of US government.
+I live as an car dealer in this country.
+    </textarea>
+  </body>
+</html>

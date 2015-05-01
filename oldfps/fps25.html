@@ -1,0 +1,3916 @@
+<!doctype html>
+<html>
+  <head>
+    <title>fps25.html</title>
+    <meta name="viewport" content="
+      width=device-width,
+      initial-scale=1.0,
+      maximum-scale=1.0,
+      user-scalable=0,
+      target-densitydpi=device-dpi" />
+    <meta name="keywords" content="
+      ゲーム,
+      Game,
+      ネットゲー,
+      Network Game,
+      MMO,MMORPG,
+      ファンタジー,
+      Fantasy,
+      SF,
+      Science Fiction" />
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <script style="text/javascript" src="my_globals.js"></script>
+    <script>
+//
+// global elements
+//
+Math.random.choice = function(array) {
+    return array[Math.floor(this() * array.length)];
+};
+
+Math.random.range = function(n){
+    return Math.floor(this() * n);
+};
+
+Math.random.hue = function() {
+    return this.range(360).toString();
+};
+
+Math.random.saturation = function() {
+    return this.range(101).toString() + '%';
+}
+
+Math.random.lightness = function() {
+    return this.range(101).toString() + '%';
+}
+
+var parsePx = function(number) {
+    return Math.floor(number).toString() + "px";
+};
+
+Number.prototype.toPx = function() {
+    return parsePx(this);
+};
+
+(function(window){
+//
+// event settings
+//
+document.onkeydown = function(e) {home.changeKey(e);};
+document.onkeyup = function(e) {home.changeKey(e);};
+
+var setBorderHue = function(hue) {
+    var ids = ['container_main', 'leftAds'];
+    for (var i = 0; i < ids.length; i++) {
+        byId(ids[i]).style.borderColor = 'hsl(' + hue + ',50%, 80%)';
+    }
+};
+
+var setControlHue = function(hue) {
+    var ids = ['up', 'down', 'left', 'right', 'sayButton', 'mapNameChip'];
+    for (var i = 0; i < ids.length; i++) {
+        byId(ids[i]).style.backgroundColor = 'hsl(' + hue + ',50%, 80%)';
+    }
+};
+
+var setBackgroundHue = function(hue) {
+    document.body.style.backgroundColor = 'hsl(' + hue + ',15%, 40%)';
+};
+
+var setPeriphHue = function(hue) {
+    setBorderHue(hue);
+    setControlHue(hue);
+    setBackgroundHue(hue);
+};
+
+//
+// home - main object/namespace
+//
+var FPS = 60;
+var _SCREEN_WIDTH = 16 * 2 * 15 + 100; // 580px
+var _SCREEN_HEIGHT = 16 * 3 * 10; // 480px
+
+var home = {
+
+    STAGE_WIDTH: _SCREEN_WIDTH,
+    STAGE_HEIGHT: _SCREEN_HEIGHT,
+    
+    FRAME_RATE: FPS,
+    FRAME_LENGTH: 1000/FPS,
+    
+    keyInput: [],
+    vkeyInput: {},
+
+    main: function() {
+        this.dom = {};
+
+        this.dom.container_main = document.getElementById("container_main");
+        this.dom.container_main.style.width = home.STAGE_WIDTH.toPx();
+        this.dom.container_main.style.height = home.STAGE_HEIGHT.toPx();
+
+        this.fwmeter = new action.FWMeter(home.FRAME_LENGTH);
+        
+        this.fpsmeter = new action.FPSMeter(); 
+        this.fpsc = new action.FPSControl();
+
+        this.kdump = new action.KeyDumper();
+        this.kim = new action.KeyInputManager(home.keyInput);
+        this.vkim = new action.VirtualKeyInputManager(home.vkeyInput);
+
+        this.ms = new action.MS();
+
+        this.overlay = new action.Overlay();
+        
+        this.toggleMain();
+
+        setInterval("home.fpsmeter.writefps()", 100);
+    },
+    
+    loop: function () {
+        this.fwmeter.start();
+
+        // reaction phase, interation betweet the Nodes.
+        this.react();
+
+        // running phase, calculation inside the Nodes.
+        this.run();
+
+        // drawing phase, drawing process of the Nodes.
+        this.draw();
+
+        this.fwmeter.stop();
+
+        if (this.loopFlag) {
+            setTimeout("home.loop();", this.fwmeter.wait);
+        }
+    },
+
+    run: function() {
+        this.fpsmeter.run();
+        this.fpsc.run();
+        this.kdump.run();
+        this.kim.run();
+        this.vkim.run();
+
+        this.ms.nodeRun();
+        this.overlay.run();
+    },
+
+    react: function() {
+        this.ms.nodeReact();
+        this.overlay.react();
+    },
+
+    draw: function() {
+        this.ms.nodeDraw();
+        this.overlay.draw();
+    },
+
+    toggleMain: function() {
+        if (this.loopFlag) {
+            delete this.loopFlag;
+        } else {
+            this.loopFlag = 1;
+            this.loop();
+        }
+    },
+    
+    changeKey: function(event) {
+        home.keyInput[event.keyCode] = event.type === "keydown" ? 1 : 0;
+        if (event.type == "keydown" && (event.keyCode == 37
+                                     || event.keyCode == 38
+                                     || event.keyCode == 39
+                                     || event.keyCode == 40
+                                   )) {
+            event.preventDefault();
+        }
+        if (event.type == "keydown" && event.keyCode == 27) {
+            home.toggleMain();
+        }
+    }
+};
+
+//
+// action - runnable classes.
+//
+var action = namespace();
+
+action.KeyInputManager = Object.derive({
+    constructor: function(keyInput) {
+        this.keyInput = keyInput;
+        this.prevKeyInput = this.keyInput.slice(0);
+        this.currKeyInput = this.keyInput.slice(0);
+    },
+    
+    run: function() {
+        this.prevKeyInput = this.currKeyInput;
+        this.currKeyInput = this.keyInput.slice(0);
+    },
+    
+    toggleOn: function(key) {
+        return this.currKeyInput[key] && !this.prevKeyInput[key];
+    },
+    
+    toggleOff: function(key) {
+        return !this.currKeyInput[key] && this.prevKeyInput[key];
+    },
+    
+    key: function(key) {
+        return this.currKeyInput[key];
+    },
+
+    alt: function(key) {
+        return this.currKeyInput[18] && this.toggleOn(key);
+    },
+
+    ctrl: function(key) {
+        return this.currKeyInput[17] && this.toggleOn(key);
+    },
+});
+
+action.VirtualKeyInputManager = action.KeyInputManager.derive({
+    constructor: function(keyInput) {        
+        this.keyInput = keyInput || {};
+        this.prevKeyInput = Object(this.keyInput);
+        this.currKeyInput = Object(this.keyInput);
+    },
+
+    run: function() {
+        this.prevKeyInput = this.currKeyInput;
+        this.currKeyInput = Object(this.keyInput)
+    }
+});
+
+/**
+ * Base Node
+ */
+action.BaseRunner  = Object.derive({
+    alive: true,
+    nodeAliveAllFlag: true,
+
+    _nop: function() {
+    },
+
+    _nodePrepare: function() {
+        if (this.children == undefined) {
+            this.children = [];
+        }
+    },
+
+    _setParent: function(parent) {
+        this.parent = parent;
+    },
+
+    nodeClear: function() {
+        this.children = [];
+    },
+
+    nodeAppend: function(obj) {
+        this._nodePrepare();
+        if (obj == null) {
+            return;
+        }
+        obj._setParent(this);
+        this.children.push(obj);
+    },
+
+    nodeExtend: function(args) {
+        if (args == undefined) {
+            this.runnerCheck();
+            return;
+        }
+        if (!Array.prototype.isPrototypeOf(args)) {
+            return;
+        }
+        this._nodePrepare();
+        for (var i =　0; i < args.length; i++) {
+            args[i]._setParent(this);
+            this.children.push(args[i]);
+        }
+    },
+
+    runnerCheck: function() {
+        this._nodePrepare();
+        for (var i in this) {
+            if (this[i] instanceof action.BaseRunner && this.children.indexOf(this[i]) < 0) {
+                this[i]._setParent(this);
+                this.children.push(this[i]);
+            }
+        }
+    },
+
+    nodeAliveAll: function(flag) {
+        if (flag == null) {
+            return this.nodeAliveAllFlag;
+        } else {
+            return this.nodeAliveAllFlag = flag;
+        }
+    },
+
+    nodeAliveCheck: function() {
+        // alive-checking of children array.
+        if (this.children == undefined) {
+            return;
+        }
+        var i = 0;
+        while (true) {
+            if (i >= this.children.length) {
+                return;
+            }
+            if (!this.children[i].alive) {
+                this.children.splice(i, 1);
+            } else {
+                i++;
+            }
+        }
+    },
+
+    _nodeCommand: function(cmd) {
+        if (this.children == undefined) {
+            return;
+        }
+        for (var i = 0; i < this.children.length; i++) {
+            this.children[i][cmd]();
+        }
+    },
+
+    react: function() {
+    },
+
+    nodeReact: function() {
+        if (!this.alive) {
+            return;
+        }
+        if (!this.nodeAliveAll()) {
+            this.nodeAliveCheck();
+            this.nodeAliveAll(1);
+        }
+        this._nodeCommand("nodeReact");
+        this.react();
+    },
+
+    run: function() {
+    },
+
+    nodeRun: function() {
+        if (!this.alive) {
+            return;
+        }
+        this._nodeCommand("nodeRun");
+        this.run();
+    },
+
+    draw: function() {
+    },
+
+    nodeDraw: function(){
+        if (!this.alive) {
+            return;
+        }
+        this._nodeCommand("nodeDraw");
+        this.draw();
+    },
+
+    die: function() {
+        this.alive = false;
+        this._nodeCommand("die");
+        this.react = this._nop;
+        this.run = this._nop;
+        this.draw = this._nop;
+        this.nodeReact = this._nop;
+        this.nodeRun = this._nop;
+        this.nodeDraw = this._nop;
+        this.parent.nodeAliveAll(0);
+        if (this.__hasDom__) {
+            for (var i in this) {
+                var dom = this[i];
+                if (dom instanceof HTMLElement && dom.parentElement != null) {
+                    dom.parentElement.removeChild(dom);
+                }
+            }
+        }
+    },
+
+    nodeDie: function() {
+        this._nodeCommand('die');
+    },
+
+    getName: function() {
+        var buf = '';
+        buf += typeof this.__module__ === "string" ? this.__module__ + ':' : '';
+        buf += this.constructor.prototype.hasOwnProperty("__name__") ? this.__name__ :
+               this.constructor.name !== "" ? this.constructor.name : "anonymous";
+        return buf;
+    },
+
+    /**
+     * dump the node tree as XML.
+     * @param n indent level
+     * @param recCheck list of nodes already checked.
+     * @return XML representaion of node tree.
+     */
+    toXML: function(n, recCheck) {
+        if (n === undefined) {
+            n = 0;
+        }
+        if (recCheck === undefined) {
+            recCheck = [];
+        }
+        var indent = "";
+        for (var i = 0; i < n; i++) {
+            indent += "    ";
+        }
+        if (n > 9) {
+            return indent + "deep!";
+        }
+        var buf = indent;
+        var name = this.getName();
+        buf += "<" + name;
+        if (recCheck.indexOf(this) >= 0) {
+            return buf + " *recursion* />";
+        }
+        //var recCheck_ = recCheck.concat([]);
+        var recCheck_ = recCheck;
+        recCheck_.push(this);
+        var t = [];
+        for (i in this) {
+            if (i === "parent") {
+                // exclude the parent node.
+                continue;
+            }
+            if (this[i] instanceof action.BaseRunner) {
+                t.push(this[i]);
+            }
+        }
+        var s = [];
+        if (this.children !== undefined) {
+            for (i in this.children) {
+                var obj = this.children[i];
+                if (obj instanceof action.BaseRunner && t.indexOf(obj) < 0) {
+                    s.push(obj);
+                }
+            }
+        }
+        t = t.concat(s);
+        if (t.length === 0) {
+            return buf + " />";
+        }
+        buf += ">";
+        for (i = 0; i < t.length; i++ ) {
+            if (i > 20) {
+                buf += "\n" + indent + "    <!--";
+                buf += "\n" + indent + "    other " + (t.length - 20) + " node(s)";
+                buf += "\n" + indent + "    -->";
+                break;
+            }
+            buf += "\n" + t[i].toXML(n + 1, recCheck_);
+        }
+        buf += "\n" + indent + "</" + name + ">";
+        return buf;
+    }
+});
+
+action.LeafRunner = action.BaseRunner.derive({
+    nodeReact: function() {
+        this.react();
+        this.nodeReact = this.react;
+    },
+
+    nodeRun: function() {
+        this.run();
+        this.nodeRun = this.run;
+    },
+
+    nodeDraw: function() {
+        this.draw();
+        this.nodeDraw = this.draw;
+    }
+});
+
+action.Listener = action.BaseRunner.derive({
+    initMQ: function() {
+        this._mqReady = 1;
+        this._mq = new Array(); // the message queue
+        this.listen = this._listen;
+    },
+
+    checkMQ: function() {
+        if (this._mqReady) {
+            return;
+        } else {
+            this.initMQ();
+        }
+    },
+
+    message: function(ms) {
+        this.checkMQ();
+        this._mq.push(ms);
+    },
+
+    listen: function() {
+    },
+
+    _listen: function() {
+        var ms;
+        var handlerFunction;
+        while (ms = this._mq.shift()) {
+            if (handlerFunction = this.Listening[ms.head]) {
+                handlerFunction.call(this, ms);
+            }
+        }
+    },
+
+    Listening: {} // Message handler functions of the object
+});
+
+action.LRunner = action.BaseRunner.derive().mixin(action.BaseListener);
+
+util = namespace();
+
+util.PropertyBinder = Object.derive({
+    constructor: function() {
+        this._binds = [];
+    },
+
+    setTarget: function(target) {
+        this.target = target;
+    },
+
+    bind: function(p, v, m) {
+        this._binds.push({p: p, v: v, m: m});
+    },
+
+    resetValues: function() {
+        for (var i = 0; i < this._binds.length; i++) {
+            var b = this._binds[i];
+            this.target[b.p] = b.v.value[b.m]()
+        }
+    },
+
+    runValues: function() {
+        for (var i = 0; i < this._binds.length; i++) {
+            var b = this._binds[i];
+            b.v.run();
+        }
+    }
+})
+
+action.FWMeter = Object.derive({
+    constructor: function(frame_length) {
+        this.dom = byId("frame-wait");
+        this.frame_length = frame_length;
+        this.t = 0;
+    },
+    
+    start: function() {
+        this.t = (new Date).getTime();
+    },
+    
+    stop: function() {
+        var diff = (new Date()).getTime() - this.t;
+        this.wait = this.frame_length - diff;
+        this.dom.innerHTML =
+            "<div style='width: 120px; background-color: #225533; '>"
+            + "<div style='width:" + Math.floor(Math.max(this.wait * 4, 0)) + "px; background-color: #af0; display: block;'>"
+            + "wait:<span style='color: #800; '>" + this.wait.toPrecision(4) + "</span></div></div>";        
+    }
+});
+    
+action.FPSMeter = action.Listener.derive({
+    constructor: function() {
+        this.elem = byId("fps-meter");
+        this.elem_ = byId("fps-monitor");
+        this.i = 0;
+        this.j = 0;
+        this.met = [0,0,0,0,0,0,0,0,0,0];
+        this.mapName = "-";
+    },
+    
+    run: function() {
+        this.i += 1;
+        this.met[0] += 1;
+        this.elem.innerHTML = this.i.toString();
+        this.listen();
+    },
+
+    Listening: {
+        MN: function(ms) {
+            this.mapName = ms.name;
+        }
+    },
+    
+    writefps: function() {
+        this.j += 1;
+        var s = 0;
+        for (var i = 0; i < this.met.length; i++) {
+            s += this.met[i];
+        }
+        this.elem_.innerHTML =
+            "<span style='color:#158;'>" + this.mapName + "</span><br />"
+            + "cnt: " + this.j
+            + "<div style='width: 120px; background-color: #225533; '>"
+            + "<div style='width:" + s * 2 + "px; background-color:#aaff00; display: block;'>"
+            + "fps:<span style='color: #800; '>" + s + "</span></div></div>";
+        this.i = 0;
+        this.met.unshift(0);
+        this.met.pop();
+    }
+});
+
+action.FPSControl = action.Listener.derive({
+    constructor: function FPSControl() {
+        this.dom = document.getElementById("container_fps");
+        this.left = new value.Const(0);
+        this.DUR = FPS * 0.20;
+        this.controlToggle = 1;
+    },
+    
+    run: function() {
+        if (home.kim.alt(78)) {
+            var goal = this.controlToggle * -130;
+            this.left = new value.Track(
+                [[this.left.value, this.DUR], [goal]]
+            );
+            this.controlToggle ^= 1;
+        }
+        this.left.run();
+        this.dom.style.left = this.left.value.toPx();
+        this.dom.style.top = this.left.value.toPx();
+    }
+});
+
+action.KeyDumper = Object.derive({
+    constructor: function() {
+        this.x = 200;
+        this.y = 0;
+        this.dom = byId("custom-field");
+    },
+    
+    run: function() {
+        var a = [];
+        for (var i = 0; i < home.keyInput.length; i++) {
+            if (home.keyInput[i]) a.push(i);
+        }
+        this.dom.innerHTML = "keys: " + a.map(function(x){return "<span style='color: blue;'>" + x + "</span>"});
+    }
+});
+
+action.CommandProcessor = action.Listener.derive({
+    constructor: function(env) {
+        this.env = env;
+    },
+
+    react: function() {
+        this.listen();        
+    },
+
+    run: function() {
+    },
+
+    Listening: {
+        CMD: function(ms) {
+            if (ms.cmd.charAt(0) === '/') {
+                this.dispatch(ms.cmd.substring(1));
+            } else {
+                this.env.sceneChars.krile.message({head: "SAY", comment: ms.cmd});
+            }
+        }
+    },
+
+    dispatch: function(cmd) {
+        x = cmd.split(/  */);
+        op = x[0];
+        if (op === "alert") {
+            alert(x.splice(1).join(' '));
+        } else if (op === "fade") {
+            home.ms.sceneCover.message({head: "TC"});
+        } else if (op === "quake") {
+            home.ms.camera.message({head: "EQ"});
+        } else if (op === "speed") {
+            home.ms.sceneChars.krile.message({head: "SPEED"});
+        } else if (op === "fade") {
+        } else if (op === "fade") {
+        }
+    }
+
+});
+
+action.MS = action.Listener.derive({
+    constructor: function() {
+        var self = this;
+
+        this.width = home.STAGE_WIDTH;
+        this.height = home.STAGE_HEIGHT;
+
+        this.dom = document.getElementById("container_main_inner");
+        this.dom.style.width = this.width.toPx();
+        this.dom.style.height = this.height.toPx();
+
+        this.mapToggle = 0;
+        this.cmdp = new action.CommandProcessor(this);
+        this.sceneBG = new action.SceneBG();
+        this.sceneCover = new action.SceneCover();
+        this.sceneMap = new action.SceneMap(this);
+        this.sceneChars = new action.SceneChars(this);
+        this.camera = new machine.CameraPoint(this);
+        var pt;
+        if (window.localStorage.krile_x != null
+            && window.localStorage.krile_y != null) {
+            pt = {"x": Number(localStorage.krile_x), "y": Number(localStorage.krile_y)};
+        }
+        this.setMapURL({
+            url: localStorage.krile_map || "map00.xml",
+            gate: null,
+            callback: function() {
+                self.sceneCover.message({head: "TC"});
+            },
+            pt: pt,
+        });
+        this.nodeExtend([
+            this.cmdp,
+            this.sceneBG,
+            this.sceneCover,
+            this.map,
+            this.sceneMap,
+            this.sceneChars,
+            this.camera
+        ]);
+    },
+
+    init: function(dto) {
+        // character deletion
+        this.sceneChars.moogles.empty();
+
+        // map size and etc. initialize
+        this.sceneMap.init();
+        this.map.view.nodeDraw();
+
+        // background clearance when map transition.
+        this.sceneBG.message({head: "CLEAR", hue: this.map.HUE});
+        if (typeof dto.pt === "object") {
+            this.sceneChars.krile.message({head: "POSITION", x: dto.pt.x, y: dto.pt.y});
+        }
+        this.sceneChars.init();
+        this.sceneChars.plate.message({head: "SC", comment: dto.title});
+
+        setPeriphHue(this.map.HUE);
+
+        // place on-map mobs.
+        var mobs = this.map.getMobs();
+        for (var i = 0; i < mobs.length; i++) {
+            var mob = mobs[i];
+            var light = new machine.SquareLight({
+                ctx: this.sceneChars.ctx,
+                x: mob.x * 16,
+                y: mob.y * 16,
+                size: 32,
+                hue: this.map.HUE,
+            });
+            light.setPeriod([[0, FPS * 2], [0.9, FPS * 2]]);
+            this.sceneChars.moogles.nodeAppend(light);
+        }
+    },
+
+    react: function() {
+        this.listen();
+    },
+
+    Listening: {
+        SM: function(ms) {
+            this.setMap.apply(this, ms.args);
+            this.sceneBG.message({
+                head: "CLEAR"
+            });
+            this.sceneChars.krile.message({head: "MOVE", after: 16});
+            this.sceneChars.krile.message({head: "POSITION", state: 0});
+            setTimeout(function(){
+                ms.sender.message({head:ms.callback});
+            }, 400);
+        },
+
+        SMU: function(ms) {
+            var self = this;
+
+            ms.args.callback = function(){
+                ms.sender.message({head:ms.callback});                
+            };
+            this.setMapURL.call(this, ms.args);
+
+            // small effects of map transition.
+            // small stop whe map transition.
+            this.sceneChars.krile.message({head: "MOVE", after: 16});
+            // looking to camera when map transition.
+            this.sceneChars.krile.message({head: "POSITION", state: 0});
+        },
+
+        GATE: function(ms) {
+            this.loadMapURL(ms.url, ms.gate);
+        }
+    },
+
+    /**
+     * change map URL.
+     * @param dto
+     * @@ dto.url (required) url of map data.
+     * @@ dto.gate (optional) entering gate.
+     * @@ dto.callback (optional) callback for map load completion
+     * @@ dto.pt (optional) initial point of Protagonist.
+     */
+    setMapURL: function(dto) {
+        var self = this;
+        if (home && home.fpsmeter) {
+            home.fpsmeter.message({head: "MN", name: dto.url});
+        }
+        localStorage.krile_map = dto.url;
+        this.map = new morph.Map({
+            url: dto.url,
+            gate: dto.gate,
+            callback: function(dto_){
+                self.init(dto_);
+                typeof dto.callback === "function" && dto.callback.apply();
+            },
+            pt: dto.pt,
+            ctx: this.sceneMap.ctx,
+        });
+    },
+
+    loadMapURL: function(url, gate) {
+        this.sceneCover.message({
+            head: 'TC',
+            sender: this,
+            callback: 'SMU',
+            callbackArgs: {
+                url: url,
+                gate: gate
+            }
+        });
+    }
+})
+
+action.SceneBG = action.Listener.derive({
+    constructor: function(env) {
+        this.canvas_main = document.getElementById("canvas_main");
+        this.canvas_main.width = home.STAGE_WIDTH;
+        this.canvas_main.height = home.STAGE_HEIGHT;
+        this.ctx = this.canvas_main.getContext("2d");
+        
+        this.squareFog = new machine.SquareFog(this.canvas_main);
+        
+        FLY_MAX = 3;
+        for (var i = 0; i < FLY_MAX; i++) {
+            this.nodeAppend(new machine.Fly(
+                Math.random.range(this.canvas_main.width),
+                Math.random.range(this.canvas_main.width),
+                this.ctx,
+                116
+            ));
+        }
+    },
+
+    react: function(){
+        this.listen();
+    },
+
+    Listening: {
+        CLEAR: function(ms) {
+            var hue = ms.hue + Math.random.range(61) - 30;
+            this.squareFog.setHue(hue);
+            this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+            this.ctx.fillStyle = "hsla(" + hue + ",100%,6%,1)";
+            this.ctx.fillRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+        }
+    },
+    
+    run: function() {
+        this.squareFog.run();
+    },
+
+    draw: function() {
+        this.squareFog.draw();
+    },
+});
+
+action.SceneCover = action.Listener.derive({
+    constructor: function() {
+        this.canvas_main = document.getElementById("canvas_layer_curtain");
+        this.canvas_main.width = home.STAGE_WIDTH;
+        this.canvas_main.height = home.STAGE_HEIGHT;
+        this.ctx = this.canvas_main.getContext("2d");
+
+        this.curtainFlag = 0;
+
+        this.CURTAIN_OPEN_DUR = FPS * 0.5;
+        this.curtain = new value.Const(1);
+        this.ctx.fillStyle = "black";
+        this.ctx.fillRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+    },
+
+    react: function() {
+        this.listen();
+    },
+
+    Listening: {
+        TC: function(ms) {
+            var self = this;
+            var callback;
+            if (ms.callback) {
+                callback = function () {
+                    ms.sender.message({
+                        head: ms.callback,
+                        args: ms.callbackArgs,
+                        sender: self,
+                        callback: "TC"
+                    });
+
+                }
+            }
+            this.toggleCurtain(callback);
+        }
+    },
+
+    toggleCurtain: function(callback) {
+        this.canvas_main.style.visibility = "visible";
+
+        this.callback = callback;
+
+        this.goal = this.curtainFlag;
+        var a = this.curtainFlag ^= 1;
+        this.curtain = new value.Track([[a, this.CURTAIN_OPEN_DUR], [this.goal]]);
+    },
+    
+    run: function() {
+        if (this.curtain.onPhaseChange()) {
+            if (this.curtain.value === 0) {
+                this.canvas_main.style.visibility = "hidden";
+            }
+            if (typeof this.callback === "function") {
+                this.callback.apply();
+            }
+        }
+        this.curtain.run();
+    },
+
+    draw: function() {
+        if (this.curtain.isChanging()) {
+            this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+            this.ctx.fillStyle = "hsla(0,100%,0%," + this.curtain.value.toPrecision(4) + ")";
+            this.ctx.fillRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+        }
+    },
+});
+
+action.SceneMap = action.Listener.derive({
+    __hasDom__: 1,
+
+    constructor: function(env) {
+        this.env = env;
+
+        this.canvas_main = document.getElementById("canvas_layer_map");
+        this.ctx = this.canvas_main.getContext("2d");
+        this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+    },
+
+    init: function() {
+        this.canvas_main.width = this.env.map.width * 16;
+        this.canvas_main.height = this.env.map.height * 16;
+    },
+
+    draw: function() {
+        this.canvas_main.style.left = (-this.env.camera.x).toPx();
+        this.canvas_main.style.top = (-this.env.camera.y).toPx();
+    },
+});
+
+action.SceneChars = action.Listener.derive({
+    __hasDom__: 1,
+
+    constructor: function(env) {
+        this.env = env;
+        this.canvas_main = document.getElementById('canvas_layer_moogle');
+        this.ctx = this.canvas_main.getContext("2d");
+        this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+
+        this.krile = new machine.Krile(
+            this,
+            (localStorage.krile_x || 2) * 16,
+            (localStorage.krile_y || 10) * 16,
+            "ff5krile.png"
+        );
+        this.krile.prot = 1;
+        if (window.localStorage.krile_speed) {
+           this.krile.nextSpeed = Number(window.localStorage.krile_speed);
+        }
+
+        this.moogles = new machine.List();
+
+        this.plate = new machine.InfoBubbler({x: 100, y: 0});
+
+        this.nodeExtend([
+            this.krile,
+            this.plate,
+            this.moogles
+        ]);
+    },
+
+    init: function() {
+        this.canvas_main.width = this.env.map.width * 16;
+        this.canvas_main.height = this.env.map.height * 16;
+    },
+
+    react: function() {
+    },
+
+    run: function() {
+        this.ctx.clearRect(0, 0, this.canvas_main.width, this.canvas_main.height);
+    },
+
+    draw: function() {
+        this.canvas_main.style.left = (-this.env.camera.x).toPx();
+        this.canvas_main.style.top = (-this.env.camera.y).toPx();
+    },
+});
+
+action.Overlay = action.Listener.derive({
+    constructor: function Overlay(env) {
+        this.env = env;
+
+        this.dom = document.getElementById('overlay');
+        this.dom.style.width = "0px";
+        this.dom.style.height = "0px";
+
+        this.flg = 0;
+        this.x = new value.Track([[0]]);
+        this.y = new value.Track([[0]]);
+        this.a = new value.Track([[0]]);
+
+        this.binder = new util.PropertyBinder();
+        this.binder.setTarget(this.dom.style);
+        this.binder.bind("width", this.x, "toPx");
+        this.binder.bind("height", this.y, "toPx");
+        this.binder.bind("opacity", this.a, "toString");
+
+        this.X_MAX = home.STAGE_WIDTH;
+        this.Y_MAX = home.STAGE_HEIGHT;
+    },
+
+    init: function() {},
+
+    Listening: {
+        SLD: function() {
+            if (this.flg == 0) {
+                this.slideIn();
+            } else {
+                this.slideOut();
+            }
+            this.flg ^= 1;
+        },
+
+        FD: function() {
+            if (this.flg == 0) {
+                this.fadeIn();
+            } else {
+                this.fadeOut();
+            }
+            this.flg ^= 1;
+        },
+    },
+
+    react: function() {
+        this.listen();
+        if (home.kim.toggleOn(90) && home.kim.key(18)) {
+            this.message({head: Math.random.choice(["SLD", "FD"])});
+        }
+    },
+
+    slideIn: function() {
+        this.x.init([[0, 16], [this.X_MAX]]);
+        this.y.init([[this.Y_MAX]]);
+        this.a.init([[1]]);
+    },
+
+    slideOut: function() {
+        this.x.init([[this.X_MAX, 16], [0]]);
+        this.y.init([[this.Y_MAX]]);
+        this.a.init([[1]]);
+    },
+
+    fadeIn: function() {
+        this.x.init([[this.X_MAX]]);
+        this.y.init([[this.Y_MAX]]);
+        this.a.init([[0, 16], [1]]);
+    },
+
+    fadeOut: function() {
+        this.x.init([[this.X_MAX]]);
+        this.y.init([[this.Y_MAX]]);
+        this.a.init([[1, 16], [0]]);
+    },
+
+    run: function() {
+        this.binder.runValues();
+    },
+
+    draw: function() {
+        this.binder.resetValues();
+    }
+});
+
+action.BubbleManager = action.Listener.derive({
+    Listening: {
+        SCENE: function() {
+            
+        }
+    }
+});
+
+action.Bubble = action.BaseRunner.derive({
+    __hasDom__: 1,
+
+    constructor: function Bubble(target) {
+        this.age = 0;
+        this.PERIOD = FPS * 8;
+        this.alpha = new value.SineWaveAbs(this.PERIOD, 2);
+        this.target = target || {x: 0, y: 0};
+        this.wrap = document.createElement("div");
+        this.wrap.style.position = "absolute";
+        this.wrap.style.background = "url(tweet_bubble2.png) right 0px no-repeat";
+        this.wrap.style.padding = "0px 8px 0px 0px";
+        this.dom = document.createElement("div");
+        this.dom.style.background = "url(tweet_bubble2.png) 0px 0px no-repeat";
+        this.dom.style.whiteSpace = "nowrap";
+        this.dom.style.padding = "0px 0px 4px 8px";
+        this.dom.style.margin = "0px 0px 0px -2px";
+        this.dom.style.lineHeight = "20px";
+        this.dom.style.color = "#2A7090";
+        this.wrap.appendChild(this.dom);
+        byId("container_bubbler").appendChild(this.wrap);
+    },
+    
+    react: function() {
+    },
+    
+    setDoc: function(doc) {
+        this.doc = byId(doc).innerHTML.trim().split("\n");
+        this.dom.innerHTML = this.doc[0];
+    },
+
+    setPeriod: function(period) {
+        this.age = 0;
+        this.PERIOD = period;
+        this.alpha = new value.SineWaveAbs(this.PERIOD, 2);
+    },
+
+    run: function() {
+        this.age += 1;
+        this.alpha.run();
+        if (this.age * 2 % this.PERIOD === 0) {
+            this.dom.innerHTML = '<a href="http://google.com/" style="text-decoration: none; color: #2A7090;" target="_blank">' + this.doc[this.age * 2 / this.PERIOD % this.doc.length] + '</a>';
+        }
+    },
+
+    draw: function() {
+        this.wrap.style.top = (this.target.y - home.ms.camera.y - 28).toPx();
+        this.wrap.style.left = (this.target.x - home.ms.camera.x + 3).toPx();
+        this.wrap.style.opacity = (this.alpha.value - 0.5).toString();        
+    }
+});
+
+//
+// machine - state machines.
+//
+var machine = namespace();
+
+// List Node
+machine.List = action.BaseRunner.derive({
+    constructor: function() {},
+
+    bulkMessage: function(ms) {
+        for (var i in this.children) {
+            if (typeof this.children[i].message === "function") {
+                this.children[i].message(ms);
+            }
+        }
+    },
+
+    clear: function() {
+        this.empty();
+    },
+
+    empty: function() {
+        this.nodeDie();
+    },
+
+    isEmpty: function() {
+        return this.children == null || this.children.length == 0;
+    }
+});
+
+machine.BubbleOnce = action.Listener.derive({
+    POPUP_DUR: FPS / 4,
+    DEFAULT_COMMENT: "♪",
+    __hasDom__: 1,
+
+    constructor: function(target) {
+        this.age = 0;
+        this.kuCount = 0;
+        this.alpha = new value.Track([[0]]);
+        this.pos = new value.Track([[0]]);
+        this.target = target || {x: 0, y: 0};
+        this.deadline = Infinity;
+        this.makeDom();
+        byId("container_bubbler").appendChild(this.wrap);
+    },
+
+    makeDom: function() {
+        this.wrap = document.createElement("div");
+        this.wrap.style.position = "absolute";
+        this.wrap.style.background = "url(tweet_bubble2.png) right 0px no-repeat";
+        this.wrap.style.padding = "0px 8px 0px 0px";
+        this.dom = document.createElement("div");
+        this.dom.style.background = "url(tweet_bubble2.png) 0px 0px no-repeat";
+        this.dom.style.whiteSpace = "nowrap";
+        this.dom.style.padding = "0px 0px 4px 8px";
+        this.dom.style.margin = "0px 0px 0px -2px";
+        this.dom.style.lineHeight = "20px";
+        this.dom.style.color = "#2A7090";
+        this.wrap.appendChild(this.dom);        
+    },
+    
+    react: function() {
+        this.listen();
+    },
+
+    Listening: {
+        SC: function(ms) {
+            if (ms.comment.trim()) {
+                this.setComment(ms.comment);
+            } else {
+                this.setComment(this.DEFAULT_COMMENT);
+            }
+        },
+
+        KU: function(ms) {
+            this.knockUp();
+        }
+    },
+
+    setComment: function(comment) {
+        var a = this.POPUP_DUR;
+        var b = this.commentDisplayTime(comment);
+        this.deadline = a * 2 + b;
+        this.age = 0;
+        this.comment = comment;
+        this.dom.textContent = comment;
+        var self = this;
+        this.alpha.init([[0, a], [1, b], [1, a, function() {self.die();}], [0]]);
+        this.pos.init([[16, a], [0, b], [0, a], [-16]]);
+    },
+
+    commentDisplayTime: function(comment) {
+        return FPS * Math.log(comment.length + 1);
+    },
+
+    knockUp: function() {
+        this.kuCount += 1;
+        if (this.kuCount == 5) {
+            var self = this;
+            this.alpha.init([[1, this.POPUP_DUR, function() {self.die();}], [0]]);
+            //this.pos = this.pos.shift(new value.Track([[0, this.POPUP_DUR], [-28]]));
+        }
+        this.pos = this.pos.shift(new value.Track([[0, this.POPUP_DUR], [-28]]));
+    },
+    
+    run: function() {
+        this.alpha.run();
+        this.pos.run();
+    },
+
+    draw: function() {
+        this.wrap.style.top = (this.target.y - home.ms.camera.y - 28 + this.pos.value).toPx();
+        this.wrap.style.left = (this.target.x - home.ms.camera.x + 3).toPx();
+        this.wrap.style.opacity = this.alpha.value.toString();
+    }
+});
+
+machine.InfoBubbler = machine.BubbleOnce.derive({
+    POPUP_DUR: FPS / 4*2,
+    DEFAULT_COMMENT: "-",
+
+    makeDom: function() {
+        this.wrap = document.createElement("div");
+        this.wrap.style.position = "absolute";
+        this.wrap.style.width = (home.STAGE_WIDTH - this.target.x * 2).toPx();
+        this.wrap.style.backgroundColor = "#ccc";
+        this.wrap.style.padding = "8px";
+        this.wrap.style.border = "solid 0px #57a";
+        this.wrap.style.borderBottomRightRadius = "10px";
+        this.wrap.style.borderBottomLeftRadius = "10px";
+        this.wrap.style.boxShadow = "2px 2px 10px #000";
+        this.dom = document.createElement("div");
+        this.dom.style.textAlign = "center";
+        this.dom.style.fontSize = "x-large";
+        this.dom.style.fontFamily = "Times New Roman";
+        this.dom.style.fontWeight = "bold";
+        this.dom.style.padding = "5px";
+        this.dom.style.lineHeight = "20px";
+        this.dom.style.color = "#333";
+        this.wrap.appendChild(this.dom);        
+    },
+
+    setComment: function(comment) {
+        var a = this.POPUP_DUR;
+        var b = this.commentDisplayTime(comment);
+        this.comment = comment;
+        this.dom.innerHTML = comment;
+        this.alpha.init([[0, a], [1, b], [1, a], [0]]);
+        this.pos.init([[-32, a], [0, b], [0, a], [-16]]);
+    },
+
+    setColor: function(color) {
+        this.wrap.style.backgroundColor = color;
+    },
+
+
+    commentDisplayTime: function(comment) {
+        return FPS * 1.6;
+    },
+
+    draw: function() {
+        this.wrap.style.top = (this.target.y + 0.7 * this.pos.value).toPx();
+        this.wrap.style.left = (this.target.x).toPx();
+        this.wrap.style.opacity = (this.alpha.value * 0.85).toString();
+    }
+});
+
+/**
+ * Lighting Object
+ * @param dto.x
+ * @param dto.y
+ * @param
+ */
+machine.SquareLight = action.Listener.derive({
+    constructor: function(dto) {
+        this.ctx = dto.ctx;
+        this.x = dto.x;
+        this.y = dto.y;
+        this.hue = dto.hue || 0;
+        this.lumino = dto.lumino || 80;
+        this.size = dto.size;
+        this.alpha = new value.Track(0);
+        this.nodeAppend(this.alpha);
+    },
+
+    setPeriod: function(period) {
+        this.alpha.init(period);
+    },
+
+    draw: function(dto) {
+        this.ctx.save();
+        this.ctx.translate(this.x + 8, this.y + 8);
+        this.ctx.beginPath();
+        var grad = this.ctx.createRadialGradient(0, 0, 4, 0, 0, this.size - 4);
+        grad.addColorStop(0, "hsla(" + this.hue + ", 100%, " + this.lumino + "%," + this.alpha.value + ")");
+        grad.addColorStop(1, "hsla(" + this.hue + ", 100%, " + this.lumino + "%, 0)");
+        this.ctx.fillStyle = grad;
+        /*this.ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
+        this.ctx.fill();*/
+        this.ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+        this.ctx.restore();
+    }
+})
+
+machine.Krile = action.Listener.derive({
+    __defaultSprite__: "ff5krile.png",
+    
+    constructor: function (env, x, y, spriteSheet) {
+        this.spriteSheet = new Image();
+        this.spriteSheet.src = spriteSheet || this.__defaultSprite__;
+        this.chardim = 16;
+
+        this.bubbles = new machine.List();
+        this.nodeAppend(this.bubbles);
+        
+        this.toggle = 0;
+        this.state = 0;
+        this.moveCount = 0;
+        this.stopCount = 0;
+        this.nextStopCount = 0;
+        this.moveSpeed = 1;
+        this.nextSpeed = 1;
+
+        this.onReachFlag = 0;
+        
+        this.x = x;
+        this.y = y;
+
+        this.coord = {};
+        this.coord.x = Math.floor(x / 16);
+        this.coord.y = Math.floor(y / 16);
+
+        this.next = {};
+        this.next.x = this.coord.x;
+        this.next.y = this.coord.y;
+        
+        this.env = env;
+    },
+
+    getInput: function() {
+        if (home.kim.alt(49)) {
+            this.bearStraight("straight");
+        }
+        if (home.kim.alt(50)) {
+            this.bear(machine.RightClockMoogle, "right clock.");
+        }
+        if (home.kim.alt(51)) {
+            this.bear(machine.LeftUroUro, "left uro uro.");
+        }
+        if (home.kim.alt(52)) {
+            this.bear(machine.RightUroUro, "right uro uro.");
+        }
+        if (home.kim.alt(53)) {
+            this.bear(machine.LeftClockMoogle, "i am left clock.");
+        }
+        if (home.kim.alt(54)) {
+            this.bearRightClock();
+        }
+        if (home.kim.alt(55)) {
+            this.bearRightClock();
+        }
+        if (home.kim.alt(56)) {
+            this.bearRightClock();
+        }
+        if (home.kim.alt(57)) {
+            this.bearRightClock();
+        }
+        if (home.kim.alt(58)) {
+            this.bearRightClock();
+        }
+        if (home.kim.alt(59)) {
+            this.bearRightClock();
+        }
+        if (home.kim.alt(48)) {
+            this.bearRightClock();
+        }
+        if (home.kim.alt(71/*g*/) || home.kim.key(18) && home.kim.key(70/*f*/)) {
+            this.bearRandom();
+        }
+        return {
+            up: home.kim.key(38) || home.vkim.key("up"),
+            down: home.kim.key(40) || home.vkim.key("down"),
+            left: home.kim.key(37) || home.vkim.key("left"),
+            right: home.kim.key(39) || home.vkim.key("right"),
+        };
+    },
+
+    getInputSpeed: function() {
+        return home.kim.toggleOn(83) && home.kim.key(18);
+    },
+    
+    react: function() {
+        this.listen();
+        if (this.getInputSpeed()) {
+            this.shiftSpeed();
+        }
+        if (this.onReach()) {
+            this.stepOn();
+            this.onReach(0);
+        }
+        if (this.stopCount === 0 && this.moveCount === 0) {
+            if (this.nextStopCount !== 0) {
+                this.stopCount = this.nextStopCount;
+                this.nextStopCount = 0;
+                return;
+            }
+
+            var input = this.getInput();
+
+
+            if (input.up) {
+                this.state = 1;
+                this.moveSpeed = this.nextSpeed;
+                this.next.x = this.coord.x;
+                this.next.y = this.coord.y - 1;
+                this.tryMove();
+            } else if (input.down) {
+                this.state = 0;
+                this.moveSpeed = this.nextSpeed;
+                this.next.x = this.coord.x;
+                this.next.y = this.coord.y + 1;
+                this.tryMove();
+            } else if (input.left) {
+                this.state = 2;
+                this.moveSpeed = this.nextSpeed;
+                this.next.x = this.coord.x - 1;
+                this.next.y = this.coord.y;
+                this.tryMove();
+            } else if (input.right) {
+                this.state = 3;
+                this.moveSpeed = this.nextSpeed;
+                this.next.x = this.coord.x + 1;
+                this.next.y = this.coord.y;
+                this.tryMove();
+            }
+        }
+    },
+
+    _frontCoord: function(pt) {
+        pt = pt != null ? {x: pt.x, y: pt.y} : {x: this.coord.x, y: this.coord.y};
+        if (this.state == 0) pt.y ++;
+        else if (this.state == 1) pt.y --;
+        else if (this.state == 2) pt.x --;
+        else if (this.state == 3) pt.x ++;
+        return pt;
+    },
+
+    _backCoord: function(pt) {
+        pt = pt != null ? {x: pt.x, y: pt.y} : {x: this.coord.x, y: this.coord.y};
+        if (this.state == 0) pt.y --;
+        else if (this.state == 1) pt.y ++;
+        else if (this.state == 2) pt.x ++;
+        else if (this.state == 3) pt.x --;
+        return pt;
+    },
+
+    _leftCoord: function(pt) {
+        pt = pt != null ? {x: pt.x, y: pt.y} : {x: this.coord.x, y: this.coord.y};
+        if (this.state == 0) pt.x ++;
+        else if (this.state == 1) pt.x --;
+        else if (this.state == 2) pt.y ++;
+        else if (this.state == 3) pt.y --;
+        return pt;
+    },
+
+    _rightCoord: function(pt) {
+        pt = pt != null ? {x: pt.x, y: pt.y} : {x: this.coord.x, y: this.coord.y};
+        if (this.state == 0) pt.x --;
+        else if (this.state == 1) pt.x ++;
+        else if (this.state == 2) pt.y --;
+        else if (this.state == 3) pt.y ++;
+        return pt;
+    },
+
+    _getAsset: function(pt) {
+        return this.env.env.map.getAsset(pt);
+    },
+
+    passable: function(pt) {
+        var asset = this._getAsset(pt);
+        if (!asset) {
+            return false;
+        }
+        return asset.passable;
+    },
+
+    _reachableFront: function(pt) {
+        return this.passable(this._frontCoord(pt));
+    },
+
+    _reachableBack: function(pt) {
+        return this.passable(this._backCoord(pt));
+    },
+
+    _reachableLeft: function(pt) {
+        return this.passable(this._leftCoord(pt));
+    },
+
+    _reachableRight: function(pt) {
+        return this.passable(this._rightCoord(pt));
+    },
+
+    _assetFront: function(pt) {
+        return this._getAsset(this._frontCoord(pt));
+    },
+
+    _assetBack: function(pt) {
+        return this._getAsset(this._backCoord(pt));
+    },
+
+    _assetLeft: function(pt) {
+        return this._getAsset(this._leftCoord(pt));
+    },
+
+    _assetRight: function(pt) {
+        return this._getAsset(this._rightCoord(pt));
+    },
+
+    getSurround: function() {
+        var r = this._rightCoord();
+        window.r = r;
+        var l = this._leftCoord();
+        return {
+            f: this._reachableFront(),
+            b: this._reachableBack(),
+            l: this._reachableLeft(),
+            lf: this._reachableFront(l),
+            lb: this._reachableBack(l),
+            r: this._reachableRight(),
+            rf: this._reachableFront(r),
+            rb: this._reachableBack(r),
+        };
+    },
+
+    getAssetsSurround: function() {
+        var r = this._rightCoord();
+        window.r = r;
+        var l = this._leftCoord();
+        return {
+            f: this._assetFront(),
+            b: this._assetBack(),
+            l: this._assetLeft(),
+            lf: this._assetFront(l),
+            lb: this._assetBack(l),
+            r: this._assetRight(),
+            rf: this._assetFront(r),
+            rb: this._assetBack(r),
+        };
+    },
+
+    turnRight: function() {
+        if (this.state == 0) this.state = 2;
+        else if (this.state == 1) this.state = 3;
+        else if (this.state == 2) this.state = 1;
+        else if (this.state == 3) this.state = 0;
+    },
+
+    turnLeft: function() {
+        if (this.state == 0) this.state = 3;
+        else if (this.state == 1) this.state = 2;
+        else if (this.state == 2) this.state = 0;
+        else if (this.state == 3) this.state = 1;
+    },
+
+    turnBack: function() {
+        this.state ^= 1; // 0 <-> 1, 2 <-> 3
+    },
+
+    stepOn: function() {
+        var asset = this.env.env.map.getAsset(this.coord);
+        if (this.prot && asset != null) {
+            var symbol = asset.symbol;
+            if (!/\./.test(symbol)) {
+                this.placeLight();
+                asset.changeSymbol("achs"[this.state])
+                Math.random() < 0.02 && this.bubbles.isEmpty() && this.message({head: "SAY",  comment: 'symbol is "' +asset.symbol + '"'});
+            }
+        }
+    },
+
+    Listening: {
+        SPEED: function(ms) {
+            this.shiftSpeed();
+        },
+
+        STOP: function(ms) {
+            this.nextStopCount = Infinity;
+        },
+
+        MOVE: function(ms) {
+            if (ms.after) {
+                this.stopCount = ms.after;
+            } else {
+                this.stopCount = 0;
+            }
+            this.nextStopCount = 0;
+        },
+
+        POSITION: function(ms) {
+            this.moveCount = 0;
+            if (ms.x) {
+                this.coord.x = ms.x;
+                this.x = ms.x * this.chardim;
+                if (this.prot) {
+                    localStorage.krile_x = this.coord.x;
+                }
+            }
+            if (ms.y) {
+                this.coord.y = ms.y;
+                this.y = ms.y * this.chardim;
+                if (this.prot) {
+                    localStorage.krile_y = this.coord.y;
+                }
+            }
+            if (this.validState(ms.state)) {
+                this.state = ms.state;
+            }
+        },
+
+        STATE: function(ms) {
+            if (this.validState(ms.state)) {
+                this.state = ms.state;
+            }
+        },
+
+        SAY: function(ms) {
+            this.bubble(ms.comment);
+        },
+
+        DIE: function(ms) {
+            this.die();
+        },
+    },
+
+    validState: function(state) {
+        return typeof state === "number" && 0 <= state && state <= 3;
+    },
+    
+    bubble: function(comment) {
+        this.bubbles.bulkMessage({head: "KU"});
+        var bubble = new machine.BubbleOnce(this);
+        bubble.message({head: "SC", comment:comment});
+        this.bubbles.nodeAppend(bubble);
+    },
+
+    placeLight: function() {
+        var light = new machine.SquareLight({
+            ctx: this.env.ctx,
+            x: this.coord.x * 16,
+            y: this.coord.y * 16,
+            size: this.chardim,
+            hue: this.env.env.map.COUNTER_HUE,
+        });
+        light.setPeriod([[0, 10], [0.9, 30, function(){light.die();}], [0]]);
+
+        this.env.moogles.nodeAppend(light);
+    },
+
+    placeLightWhite: function() {
+        var light = new machine.SquareLight({
+            ctx: this.env.ctx,
+            x: this.coord.x * 16,
+            y: this.coord.y * 16,
+            size: this.chardim,
+            hue: this.env.env.map.HUE,
+        });
+        light.setPeriod([[0, 10], [0.9, 30, function(){light.die();}], [0]]);
+
+        this.env.moogles.nodeAppend(light);
+    },
+
+    placeLightBorn: function() {
+        var light = new machine.SquareLight({
+            ctx: this.env.ctx,
+            x: this.coord.x * 16,
+            y: this.coord.y * 16,
+            size: this.chardim * 5,
+            hue: this.env.env.map.COUNTER_HUE,
+            lumino: 1,
+        });
+        light.setPeriod([[0, 10], [1, 30, function(){light.die();}], [0]]);
+
+        this.env.moogles.nodeAppend(light);
+    },
+
+    bear: function(kind, comment, spriteSheet) {
+        var moogle = new kind(
+            this.env,
+            this.coord.x * 16, this.coord.y * 16,
+            spriteSheet
+        );
+        this.placeLightBorn();
+        if (comment != null) {
+            moogle.message({head: "SAY", comment: comment})
+        }
+        moogle.message({head: "STATE", state: this.state});
+        this.env.moogles.nodeAppend(moogle);
+    },
+
+    bearStraight: function(comment) {
+        this.bear(machine.StraightMoogle, comment)
+    },
+
+    bearRightClock: function(comment) {
+        this.bear(machine.RightClockMoogle, comment);
+    },
+
+    bearLeftClock: function(comment) {
+        this.bear(machine.LeftClockMoogle, comment);
+    },
+
+    bearRandom: function(comment) {
+        this.bear(machine.Moogle, "mewl! I'm random.", "tc.png")
+    },
+
+    shiftSpeed: function() {
+        this.say("speed change.");
+        this.nextSpeed = this.nextSpeed * 2 % 16 || 1;
+        if (this.prot) {
+            window.localStorage.krile_speed = this.nextSpeed;
+        }
+    },
+
+    say: function(comment) {
+        this.message({head: "SAY", comment: comment});
+    },
+
+    tryMove: function() {
+        if (this.passable(this.next) || !this.passable(this.coord)) {
+            this.coord.x = this.next.x;
+            this.coord.y = this.next.y;
+            if (this.prot) {
+                localStorage.krile_x = this.coord.x;
+                localStorage.krile_y = this.coord.y;
+                var event;
+                if (event = this.env.env.map.onEnter(this.next)) {
+                    this.env.env.message({head: "GATE", url: event.url, gate: event.gate});
+                    this.message({head: "STOP"});
+                    this.bubble("warp!");
+                }
+            }
+            this.moveCount = 16;
+        } else {
+            this.onReach(1);
+        }
+    },
+    
+    run: function() {
+        if (this.stopCount > 0) {
+            this.stopCount -= 1;
+            return;
+        }
+        if (this.moveCount > 0) {
+            this.moveCount -= this.moveSpeed;
+            if (this.moveCount <= 0) {
+                this.onReach(1);
+            }
+            if (this.moveCount % 8 == 0) this.toggle ^= 1;
+            if (this.state === 1) {
+                this.y = this.y  - this.moveSpeed;
+            } else if (this.state === 0) {
+                this.y = this.y + this.moveSpeed;
+            } else if (this.state === 2) {
+                this.x = this.x - this.moveSpeed;
+            } else if (this.state === 3) {
+               this.x = this.x + this.moveSpeed;
+            }
+        }
+    },
+
+    onReach: function(flag) {
+        if (flag == null) {
+            return this.onReachFlag;
+        } else {
+            return this.onReachFlag = flag;
+        }
+    },
+    
+    draw: function() {
+        this.env.ctx.drawImage(
+            this.spriteSheet,
+            this.state * 32 + this.chardim * this.toggle,
+            0,
+            this.chardim,
+            this.chardim,
+            this.x,
+            this.y,
+            this.chardim,
+            this.chardim
+        );
+    }
+});
+
+machine.Moogle = machine.Krile.derive({
+    __defaultSprite__: "ff5moogle.png",
+
+    getInput: function() {
+        return {
+            up: this.state == 1,
+            down: this.state == 0,
+            left: this.state == 2,
+            right: this.state == 3,
+        }
+    },
+
+    getInputSpeed: function() {
+        return false;
+    },
+
+    stepOn: function() {
+        this.state = Math.random.range(4);
+        this.symbolChange();
+        //this.message({head: "MOVE", after: Math.random.range(16)});
+    },
+
+    symbolChange: function() {
+        var asset = this.env.env.map.getAsset(this.coord);
+        if (asset != null) {
+            var symbol = asset.symbol;
+            if (/[x-z]/.test(symbol)) {
+                this.placeLightBorn();
+                this.die();
+                return;
+            } else if (/[a-w]/.test(symbol)) {
+                this.placeLightWhite();
+                asset.changeSymbol('0');
+                if (Math.random() < 0.2) {
+                    this.message({head: "SAY",  comment: symbol + ','});
+                }
+            } else if (/0/.test(symbol)) {
+                this.placeLight();
+                asset.changeSymbol(Math.random.choice('lmn'));
+            }
+        }
+    },
+});
+
+machine.StraightMoogle = machine.Moogle.derive({
+    stepOn: function() {
+        if (!this._reachableFront()) {
+            this.turnBack();
+        }
+        this.symbolChange();
+    },
+});
+
+machine.RightClockMoogle = machine.Moogle.derive({
+    stepOn: function() {
+        var srd = this.getSurround();
+        if (srd.r && !srd.rb) {
+            this.turnRight();
+        } else if (!srd.f && srd.r && srd.l) {
+            this.turnLeft();
+        } else if (!srd.f && !srd.r && srd.l) {
+            this.turnLeft();
+        } else if (!srd.f && !srd.r && !srd.l && srd.b) {
+            this.turnBack();
+        } else if (!srd.f && !srd.r && !srd.l && !srd.b) {
+        } else if (!srd.f && srd.r && !srd.l) {
+            this.turnBack();
+        }
+        this.symbolChange();
+    },
+    passable: function(pt) {
+        var asset = this._getAsset(pt);
+        if (!asset) {
+            return false;
+        }
+        return /\.|0/.test(asset.symbol);
+    },
+});
+
+machine.LeftClockMoogle = machine.Moogle.derive({
+    stepOn: function() {
+        var srd = this.getSurround();
+        if (srd.l && !srd.lb) {
+            this.turnLeft();
+        } else if (!srd.f && srd.r && srd.l) {
+            this.turnRight();
+        } else if (!srd.f && !srd.l && srd.r) {
+            this.turnRight();
+        } else if (!srd.f && !srd.l && !srd.r && srd.b) {
+            this.turnBack();
+        } else if (!srd.f && !srd.l && !srd.r && !srd.b) {
+        } else if (!srd.f && srd.l && !srd.r) {
+            this.turnBack();
+        }
+        this.symbolChange();
+    },
+    passable: function(pt) {
+        var asset = this._getAsset(pt);
+        if (!asset) {
+            return false;
+        }
+        return /\.|0/.test(asset.symbol);
+    },
+});
+
+machine.RightUroUro = machine.Moogle.derive({
+    stepOn: function() {
+        this.turnRight();
+        this.symbolChange();
+    },
+    passable: function(pt) {
+        var asset = this._getAsset(pt);
+        if (!asset) {
+            return false;
+        }
+        return /\.|0/.test(asset.symbol);
+    },
+
+
+});
+
+machine.LeftUroUro = machine.Moogle.derive({
+    stepOn: function() {
+        this.turnLeft();
+        this.symbolChange();
+    },
+});
+
+machine.SquareFog = action.BaseRunner.derive({
+    // background smog.
+    constructor: function SquareFog(canvas) {
+        this.canvas = canvas;
+        this.ctx = this.canvas.getContext("2d");
+        this.a = 0.2; // size ratio againt screen size;
+        this.hue = 180;
+        this.lumino_set = ["75", "50", "0", "0", "0", "0"]
+
+        this.darkness = new value.SineWave(FPS * 15, 0.45, FPS * 15 * 3 / 4).shift(0.35);
+    },
+
+    run: function() {
+        this.darkness.run();
+    },
+
+    setHue: function(hue) {
+        this.hue = hue;
+    },
+
+    draw: function() {
+        if (Math.random() < this.darkness.value) {
+            this.ctx.fillStyle = "hsla(" + this.hue + ",50%," + Math.random.choice(this.lumino_set) + "%,0.1)";
+            this.ctx.fillRect(
+                Math.random.range(this.canvas.width * (1 + this.a)) - this.canvas.width * this.a ,
+                Math.random.range(this.canvas.height * (1 + this.a)) - this.canvas.height * this.a,
+                this.canvas.width * this.a, this.canvas.height * this.a
+            );
+        }
+    }
+});
+
+machine.Fly = action.Listener.derive({
+    constructor: function Fly(x, y, pen, size) {
+        this.point = new point.RandomWalk(x, y);
+        this.prevPoint = {};
+        this.pen = pen;
+        this.size = size || 1;
+        this.half_size_neg = - this.size / 2;
+        this.color = new color.HSLA({
+            h: new value.RandomWalk(0),
+            l: new value.SineWave(300, 24, Math.random.range(600))
+                        .shift(new value.Const(25)),
+            s: new value.SineWaveAbs(600, 50, 25).shift(new value.Const(1)),
+            a: new value.Const(0.05)
+        });
+        this.rot = new value.Integral(new value.Const(140));
+        this.runnerCheck();
+    },
+    
+    run: function() {
+        this.prevPoint.x = this.point.x;
+        this.prevPoint.y = this.point.y;
+        if (Math.random() < 0.6) this.point.run();
+    },
+    
+    draw: function() {
+        this.pen.strokeStyle = this.color.toString();
+        this.pen.fillStyle = this.color.toString();
+        this.pen.lineWidth = 4;
+        this.pen.save();
+        this.pen.translate(this.point.x, this.point.y);
+        this.pen.rotate(.001 * this.rot.value);
+        if (Math.random() < 0.5) {
+            this.pen.strokeRect(this.half_size_neg, this.half_size_neg, this.size, this.size);
+        } else { 
+            this.pen.fillRect(this.half_size_neg, this.half_size_neg, this.size, this.size);
+        }
+        this.pen.restore();
+    }
+});
+
+machine.CameraPoint = action.Listener.derive({
+    /**
+     * needs target and env information. env need to have the width and height.
+     * target object need to be implement the krile interface.
+     */
+    constructor: function CameraPoint(env) {
+        PERIOD = FPS * 4;
+        this.DIR_MARGIN_DUR = FPS * 8;
+        this.DIR_MARGIN_X = 55;
+        this.DIR_MARGIN_Y = 55;
+        this._x = new value.SineWave(PERIOD, 4);
+        this._y = new value.SineWave(PERIOD, 4, PERIOD / 4);
+        this.__x = new value.CenteredBrownianMotion(0, 0.75, 0.05);
+        this.__y = new value.CenteredBrownianMotion(0, 0.75, 0.05);
+        this.env = env;
+        this.___x = new value.Const(0);
+        this.___y = new value.Const(0);
+        this.customX = new value.Track(0);
+        this.customY = new value.Track(0);
+        this.krile_state = -1;
+        this.earthQuake = 0;
+        this.setTarget(env.sceneChars.krile);
+    },
+
+    Listening: {
+        EQ: function() {
+            this.toggleQuake();
+            
+        },
+
+        CUSTOM: function(ms) {
+            this.customX.init([[this.customX.value, ms.f], [ms.x || 0]]);
+            this.customY.init([[this.customY.value, ms.f], [ms.y || 0]]);
+        }
+    },
+
+    setTarget: function(target) {
+        this.target = target;
+    },
+
+    react: function() {
+        this.listen();
+    },
+
+    toggleQuake: function() {
+        this.earthQuake = (this.earthQuake + 2) % 10;
+        var krile = this.env.sceneChars.krile;
+        if (this.earthQuake != 0) {
+            krile.say("!");
+        } else {
+            krile.say("?");
+        }
+    },
+
+    run: function() {
+        if (this.krile_state !== this.target.state) {
+            x0 = this.___x.value;
+            y0 = this.___y.value;
+            this.krile_state = this.target.state;
+            x1 = this.krile_state == 2 ? -this.DIR_MARGIN_X : this.krile_state == 3 ? this.DIR_MARGIN_X : 0;
+            y1 = this.krile_state == 0 ? this.DIR_MARGIN_Y : this.krile_state == 1 ? -this.DIR_MARGIN_Y : 0;
+            this.___x = new value.Track([[x0, this.DIR_MARGIN_DUR], [x1, Infinity]]);
+            this.___y = new value.Track([[y0, this.DIR_MARGIN_DUR], [y1, Infinity]]);
+        }
+
+        this._x.run();
+        this._y.run();
+        this.__x.run();
+        this.__y.run();
+        this.___x.run();
+        this.___y.run();
+        this.customX.run();
+        this.customY.run();
+        this.x = Math.floor(this.___x.value + this.target.x - this.env.width / 2 + this._x.value * 1 + this.__x.value * this.earthQuake + this.customX.value);
+        this.y = Math.floor(this.___y.value + this.target.y - this.env.height / 2 + this._y.value * 1 + this.__y.value * this.earthQuake + this.customY.value);
+    },
+});
+
+/**
+ *
+ * @param dto
+ * @@ dto.ctx canvas context to write
+ * @@ dto.x left of the box
+ * @@ dto.y top of the box
+ * @@ dto.size size of the box
+ * @@ dto.color color of the box
+ * @@ dto.frame frame width of the box
+ * @@ dto.clear if clear the region of box before rendering
+ */
+machine.Box = action.LeafRunner.derive({
+    constructor: function Box(dto) {
+        this.ctx = dto.ctx;
+        this.x = dto.x;
+        this.y = dto.y;
+        this.color = dto.color || "white";
+        this.size = dto.size;
+        this.frame = typeof dto.frame === "number" ? dto.frame : 0;
+        this.clear = dto.clear;
+    },
+
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.fillRect(
+            this.x + this.frame,
+            this.y + this.frame,
+            this.size - this.frame * 2,
+            this.size - this.frame * 2
+        );
+    }
+});
+
+machine.ClearBox = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+    }
+})
+
+machine.BogoBox = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.fillRect(
+            this.x + this.frame,
+            this.y + this.frame,
+            this.size - this.frame * 2,
+            this.size - this.frame * 2
+        );
+        var z = 2;
+        var x0 = this.x + this.frame + Math.random.range(z),
+            y0 = this.y + this.frame + Math.random.range(z),
+            x1 = this.x + this.frame + Math.random.range(z);
+            y1 = this.y + this.size - this.frame + Math.random.range(z),
+            x2 = this.x + this.size - this.frame + Math.random.range(z),
+            y2 = this.y + this.size - this.frame + Math.random.range(z),
+            x3 = this.x + this.size - this.frame + Math.random.range(z),
+            y3 = this.y + this.frame + Math.random.range(z);
+        this.ctx.moveTo(x0, y0);
+        this.ctx.lineTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.lineTo(x3, y3);
+        this.ctx.lineTo(x0, y0);
+        this.ctx.fill();
+    }
+});
+
+machine.BogoFrame = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.strokeStyle = this.color.toString();
+        this.ctx.beginPath();
+        var z = 2;
+        var x0 = this.x + this.frame + Math.random.range(z),
+            y0 = this.y + this.frame + Math.random.range(z),
+            x1 = this.x + this.frame + Math.random.range(z);
+            y1 = this.y + this.size - this.frame + Math.random.range(z),
+            x2 = this.x + this.size - this.frame + Math.random.range(z),
+            y2 = this.y + this.size - this.frame + Math.random.range(z),
+            x3 = this.x + this.size - this.frame + Math.random.range(z),
+            y3 = this.y + this.frame + Math.random.range(z);
+        this.ctx.moveTo(x0, y0);
+        this.ctx.lineTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.lineTo(x3, y3);
+        this.ctx.lineTo(x0, y0);
+        this.ctx.stroke();
+    }
+});
+
+machine.BozoBox = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.strokeStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.fillRect(
+            this.x + this.frame,
+            this.y + this.frame,
+            this.size - this.frame * 2,
+            this.size - this.frame * 2
+        );
+        var z = 2;
+        var x0 = this.x + this.frame + Math.random.range(z),
+            y0 = this.y + this.frame + Math.random.range(z),
+            x1 = this.x + this.frame + Math.random.range(z);
+            y1 = this.y + this.size - this.frame + Math.random.range(z),
+            x2 = this.x + this.size - this.frame + Math.random.range(z),
+            y2 = this.y + this.size - this.frame + Math.random.range(z),
+            x3 = this.x + this.size - this.frame + Math.random.range(z),
+            y3 = this.y + this.frame + Math.random.range(z);
+        this.ctx.moveTo(x0, y0);
+        this.ctx.lineTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.lineTo(x3, y3);
+        this.ctx.lineTo(x0, y0);
+        this.ctx.stroke();
+    }
+});
+
+machine.Disk = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.arc(this.x + 8, this.y + 8, 8 - this.frame, 0, Math.PI * 2);
+        this.ctx.fill();
+    }
+});
+
+machine.Circle = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.strokeStyle = this.color.toString();
+        this.ctx.beginPath();
+        this.ctx.arc(this.x + 8, this.y + 8, 8 - this.frame, 0, Math.PI * 2);
+        this.ctx.stroke();
+    }
+});
+
+machine.Annulus = machine.Box.derive({
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.beginPath();
+        this.ctx.globalCompositeOperation = "source-over";
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.arc(this.x + 8, this.y + 8, 8, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.globalCompositeOperation = "copy";
+        this.ctx.beginPath();
+        this.ctx.fillStyle = "hsla(0,0%,0%,0)";
+        this.ctx.arc(this.x + 8, this.y + 8, 4, 0, Math.PI * 2);
+        this.ctx.fill();
+    }
+});
+
+machine.Wheel = machine.Box.derive({
+    DIV: 8,
+
+    drawOne: function() {
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.arc(0, 0, 8, - Math.PI / this.DIV, Math.PI / this.DIV);
+        this.ctx.lineTo(0, 0);
+        this.ctx.stroke();
+    },
+
+    draw: function() {
+        if (this.clear) {
+            this.ctx.clearRect(this.x, this.y, this.size, this.size);
+        }
+        this.ctx.fillStyle = this.color.toString();
+        this.ctx.strokeStyle = this.color.toString();
+
+        this.ctx.save();
+        this.ctx.translate(this.x + 8, this.y + 8);
+
+        this.ctx.rotate(Math.PI / -2);
+
+        for (var i = 0; i < this.DIV; i++) {
+            this.drawOne();
+            this.ctx.rotate(Math.PI * 2 / this.DIV);
+        }
+
+        this.ctx.restore();
+    }
+});
+
+machine.Wheel8 = machine.Wheel;
+machine.Wheel7 = machine.Wheel.derive({DIV: 7});
+machine.Wheel6 = machine.Wheel.derive({DIV: 6});
+machine.Wheel5 = machine.Wheel.derive({DIV: 5});
+machine.Wheel4 = machine.Wheel.derive({DIV: 4});
+machine.Wheel3 = machine.Wheel.derive({DIV: 3});
+machine.Wheel2 = machine.Wheel.derive({DIV: 2});
+
+machine.Radiant = machine.Wheel.derive({
+    DIV: 4,
+
+    drawOne: function() {
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(8, 0);
+        this.ctx.stroke();
+    }
+});
+
+machine.Radiant8 = machine.Radiant.derive({DIV: 8});
+machine.Radiant7 = machine.Radiant.derive({DIV: 7});
+machine.Radiant6 = machine.Radiant.derive({DIV: 6});
+machine.Radiant5 = machine.Radiant.derive({DIV: 5});
+machine.Radiant4 = machine.Radiant;
+machine.Radiant3 = machine.Radiant.derive({DIV: 3});
+machine.Radiant2 = machine.Radiant.derive({DIV: 2});
+
+machine.Cross = machine.Wheel.derive({
+    DIV: 4,
+
+    drawOne: function() {
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.arc(0, 0, 8 - this.frame, - Math.PI / 2 / (this.DIV + 1), Math.PI / 2 / (this.DIV + 1));
+        this.ctx.fill();
+    }
+});
+
+machine.Cross5 = machine.Cross.derive({DIV: 5});
+machine.Cross4 = machine.Cross;
+machine.Cross3 = machine.Cross.derive({DIV: 3});
+machine.Cross2 = machine.Cross.derive({DIV: 2});
+machine.Cross1 = machine.Cross.derive({DIV: 1});
+
+machine.Windmill = machine.Wheel.derive({
+    DIV: 8,
+
+    drawOne: function() {
+        //this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(4, -1);
+        this.ctx.lineTo(8, (8 - this.DIV) / 2) ;
+        this.ctx.stroke();
+    },
+});
+
+machine.Windmill8 = machine.Windmill;
+machine.Windmill7 = machine.Windmill.derive({DIV: 7});
+machine.Windmill6 = machine.Windmill.derive({DIV: 6});
+machine.Windmill5 = machine.Windmill.derive({DIV: 5});
+machine.Windmill4 = machine.Windmill.derive({DIV: 4});
+machine.Windmill3 = machine.Windmill.derive({DIV: 3});
+machine.Windmill2 = machine.Windmill.derive({DIV: 2});
+
+machine.Seal = machine.Wheel.derive({
+    DIV: 8,
+
+    drawOne: function() {
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(7, 2);
+        this.ctx.lineTo(7, -2);
+        this.ctx.lineTo(4, 1);
+        this.ctx.lineTo(4, -1);
+        this.ctx.lineTo(0, 0);
+        this.ctx.fill();
+    },
+});
+
+//
+// morph - shape or value complex which represents something
+//
+var morph = namespace();
+
+morph.Map = action.Listener.derive({
+    constructor: function(dto) {
+        this.height = 0;
+        this.width = 0;
+        this._data = new Array();
+        this.ctx = dto.ctx;
+        if (typeof dto === "object") {
+            this.init(dto);
+        }
+    },
+
+    init: function(dto) {
+        if (typeof dto.textarea === "string") {
+            this.loadFromTextarea(dto.textarea);
+        } else if (typeof dto.string === "string") {
+            this.parseMapText(dto.string);
+        } else if (typeof dto.url == "string") {
+            this.loadFromURL(dto.url, dto.gate, dto.callback, dto.pt);
+        }
+    },
+
+    parseMapText: function(mapText) {
+        this.mobs = [];
+        this.HUE = Math.random.range(360);
+        this.COUNTER_HUE = this.HUE + 180 + Math.random.range(61) - 30;
+
+        if (230 < this.COUNTER_HUE && this.COUNTER_HUE < 280) {
+            // I don't like pure blue.
+            this.COUNTER_HUE -= 60;
+        }
+
+        this.HUE_DEVIATION = Math.random.range(5);
+        this.TILE_SATURATION = Math.random.range(70) + 30;
+
+        var div = document.createElement("div");
+        div.innerHTML = mapText;
+
+        // map chip information
+        map = div.getElementsByTagName('row');
+
+        var title;
+        if (title = div.getElementsByTagName('title')[0]) {
+            this.title = title.textContent;
+        }
+
+        // tile information
+        this.tiles = div.getElementsByTagName('tiles')[0];
+
+        // entry points infromation
+        this.enter = div.getElementsByTagName('enter')[0];
+        this.parseGate();
+
+        // exits information
+        this.exit = div.getElementsByTagName('exit')[0];
+        this.parseExits();
+
+        // set height and width of the map.
+        this.height = map.length;
+        this.width = 0;
+        this._data = [];
+        var i;
+        for (i = 0; i < map.length; i++) {
+            this._data[i] = map[i].innerHTML;
+            this.width = Math.max(this.width, map[i].innerHTML.length)
+        }
+
+        // build assets information
+        var assets = [];
+        var view = new machine.List();
+        for (i = 0; i < map.length; i++) {
+            var row = map[i].textContent;
+            var ar = [];
+            var j;
+            for (j = 0; j < row.length; j++) {
+                var c = row.charAt(j);
+                if (/[A-Z]/.test(c)) {
+                    this.mobs.push({x: j, y: i, symbol: c})
+                }
+                var asset = new morph.Asset({
+                    symbol: c,
+                    x: j,
+                    y: i,
+                    map: this,
+                });
+                ar.push(asset);
+                view.nodeAppend(asset);
+            }
+            assets.push(ar);
+        }
+        this.assets = assets;
+        this.view = view;
+    },
+
+    loadFromTextarea: function(textareaId) {
+        var map = document.getElementById(textareaId);
+        var mapText = map.textContent;
+        this.parseMapText(mapText);
+    },
+
+    loadFromURL: function(url, gate, callback, pt) {
+        var self = this;
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.onreadystatechange = function() {
+            if (this.readyState == 4) {
+                self.parseMapText(this.responseText)
+                typeof callback === "function" && callback.apply(undefined, [{
+                    title: self.title || url,
+                    pt: gate == null && pt != null ? pt : self.gate(gate)
+                }]);
+            }
+        };
+        xhr.send(null);
+    },
+
+    getMapText: function() {
+        var div = document.createElement('div');
+        var map = document.createElement('map');
+        for (var i = 0; i < this.height; i++) {
+            var row = document.createElement('row');
+            row.innerHTML = this._data[i];
+            map.appendChild(document.createTextNode('\n  '));
+            map.appendChild(row);
+        }
+        map.appendChild(document.createTextNode('\n'));
+        div.appendChild(map);
+        return div.innerHTML;
+    },
+
+    getMobs: function() {
+        return this.mobs;
+    },
+
+    rangeOK: function(pt) {
+        if (pt.x < 0 || this.width <= pt.x) {
+            return false;
+        }
+        if (pt.y < 0 || this.height <= pt.y) {
+            return false;
+        }
+        return true;
+    },
+
+    gate: function(label) {
+        if (label == null) {
+            return this._gates.__default__;
+        }
+        return this._gates[label];
+    },
+
+    parseGate: function() {
+        var gates = this.enter.getElementsByTagName('gate');
+        this._gates = {};
+        for (var i = 0; i < gates.length; i++) {
+            var gate = gates[i];
+            var label = gate.getAttribute('name');
+            this._gates[label] = this.parseGateOne(gate);
+            if (i == 0) {
+                this._gates.__default__ = this._gates[label];
+            }
+        }
+    },
+
+    parseExits: function() {
+        var gates = this.exit.getElementsByTagName('gate');
+        this._exits = {};
+        for (var i = 0; i < gates.length; i++) {
+            var gate = gates[i];
+            var label = gate.getAttribute('name');
+            this._exits[label] = this.parseExitOne(gate);
+        }
+    },
+
+    parseGateOne: function(gate) {
+        var x = Number(gate.getAttribute('x'));
+        x = x === NaN ? 0 : x;
+        var y = Number(gate.getAttribute('y'));
+        y = y === NaN ? 0 : y;
+        return {x: x, y: y};
+    },
+
+    parseExitOne: function(gate) {
+        var href = gate.getAttribute('href');
+        var x = href.split('#', 2);
+        return {url: x[0], gate: x[1]}
+    },
+
+
+    passable: function(pt) {
+        return this.rangeOK(pt) && this._data[pt.y][pt.x] !== '1';
+    },
+
+    onEnter: function(pt) {
+        if (!this.rangeOK(pt)) {
+            return undefined;
+        }
+        var chr = this._data[pt.y][pt.x];
+        var exit = this._exits[chr];
+        if (exit != null) {
+            return exit;
+        }
+        return undefined;
+    },
+
+    getAsset: function(pt) {
+        if (!this.rangeOK(pt)) {
+            return undefined;
+        }
+        var asset = this.assets[pt.y][pt.x];
+        return asset;
+    }
+});        
+
+morph.Asset = action.Listener.derive({
+    GRID_SIZE: 16,
+
+    constructor: function(dto) {
+        this.x = dto.x;
+        this.y = dto.y;
+        this.symbol = dto.symbol;
+        this.ctx = dto.map.ctx;
+        this.map = dto.map;
+        this.init();
+    },
+
+    init: function() {
+        this.passable = !/1/.test(this.symbol)
+        this.initView();
+    },
+
+    initView: function() {
+        var x = this.x,
+            y = this.y,
+            GRID_SIZE = this.GRID_SIZE;
+
+        var HUE = this.map.HUE;
+        var COUNTER_HUE = this.map.COUNTER_HUE;
+        var HUE_DEVIATION = this.map.HUE_DEVIATION;
+        var TILE_SATURATION = this.map.TILE_SATURATION;
+
+        var colorSymbol = "hsla(" + (COUNTER_HUE + Math.random.range(31) - 15) + ",100%,45%,1)";
+        var colorWall = "hsla(" + HUE + ",50%,80%,1)";
+        var colorFloor = (
+            "hsla("
+            + (HUE + Math.random.range(HUE_DEVIATION * 2 + 1) - HUE_DEVIATION) + ","
+            + TILE_SATURATION + "%,"
+            + (Math.random.range(60) + 20) + "%,"
+            + "0.45)"
+        );
+
+        var disk = new machine.Disk({
+            ctx: this.ctx,
+            x: x * GRID_SIZE,
+            y: y * GRID_SIZE,
+            size: GRID_SIZE,
+            color: colorSymbol,
+            frame: 4,
+            clear: true
+        });
+
+        var circle = new machine.Circle({
+            ctx: this.ctx,
+            x: x * GRID_SIZE,
+            y: y * GRID_SIZE,
+            size: GRID_SIZE,
+            color: colorSymbol,
+            frame: 0.5,
+            clear: false
+        });
+
+        var box = new machine.Box({
+            ctx: this.ctx,
+            x: x * GRID_SIZE,
+            y: y * GRID_SIZE,
+            size: GRID_SIZE,
+            color: colorSymbol,
+            frame: 5,
+            clear: true
+        });
+
+        this.nodeClear();
+
+        if (this.symbol == "1") {
+            this.nodeAppend(new machine.BogoBox({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorWall,
+                frame: 1,
+                clear: true
+            }));
+        } else if (this.symbol == "0") {
+            this.nodeAppend(new machine.BogoBox({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorFloor,
+                frame: Math.random.choice([2,3,4]),
+                clear: true
+            }));
+        } else if (/[A-Z]/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Circle({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 1,
+                clear: false
+            }));
+        } else if (/a/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill2({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/b/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill3({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/c/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill4({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/d/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill5({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/e/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill6({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/f/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill7({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/g/.test(this.symbol)) {
+            this.nodeAppend(new machine.Radiant3({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/h/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill2({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/i/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill3({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/j/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill4({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/k/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill5({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/l/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill6({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/m/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Windmill7({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/n/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(circle);
+        } else if (/o/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(new machine.Windmill2({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/p/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(new machine.Windmill4({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/q/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(new machine.Windmill5({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/r/.test(this.symbol)) {
+            this.nodeAppend(box);
+            this.nodeAppend(new machine.Windmill6({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+            this.nodeAppend(circle);
+        } else if (/s/.test(this.symbol)) {
+            this.nodeAppend(new machine.Cross2({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: true
+            }));
+            this.nodeAppend(circle);
+        } else if (/t/.test(this.symbol)) {
+            this.nodeAppend(new machine.Cross3({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: true
+            }));
+            this.nodeAppend(circle);
+        } else if (/u/.test(this.symbol)) {
+            this.nodeAppend(new machine.Cross4({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: true
+            }));
+            this.nodeAppend(circle);
+        } else if (/v/.test(this.symbol)) {
+            this.nodeAppend(new machine.Cross5({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: true
+            }));
+            this.nodeAppend(circle);
+        } else if (/w/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Cross2({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/x/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Cross3({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/y/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Cross4({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/z/.test(this.symbol)) {
+            this.nodeAppend(disk);
+            this.nodeAppend(new machine.Cross5({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorSymbol,
+                frame: 0,
+                clear: false
+            }));
+        } else if (/\./.test(this.symbol)) {
+            this.nodeAppend(new machine.ClearBox({
+                ctx: this.ctx,
+                x: x * GRID_SIZE,
+                y: y * GRID_SIZE,
+                size: GRID_SIZE,
+                color: colorFloor,
+                frame: 0,
+                clear: true
+            }))
+        }
+    },
+
+    changeSymbol: function(symbol) {
+        this.symbol = symbol;
+        this.init();
+        this.nodeDraw();
+    },
+});
+
+morph.CommandQueue = Object.derive({
+    constructor: function CommandQueue(name, size) {
+        this.name = name;
+        this.size = size;
+    }
+});
+
+//
+// color - moving points in RGB-color spaces or HSL-color spaces.
+//
+var color = namespace();
+
+color.RGB = action.BaseRunner.derive({
+    constructor: function RGB() {
+        this.r = args.r;
+        this.g = args.g;
+        this.b = args.b;
+        this.runnerCheck();
+    },
+    
+    toString: function() {
+        return (
+            "#"
+            + this.r.value
+            + this.g.value
+            + this.b.value
+        );
+    }
+});
+
+color.HSL = action.BaseRunner.derive({
+    constructor: function HSL(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+        this.runnerCheck();
+    },
+    
+    toString: function() {
+        return (
+            "hsl("
+            + this.h.value + ","
+            + this.s.value + "%,"
+            + this.l.value + "%)"
+        );
+    }
+});
+
+color.HSLA = action.BaseRunner.derive({
+    constructor: function HSLA(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+        this.a = args.a;
+        this.runnerCheck();
+    },
+        
+    toString: function() {
+        return (
+            "hsla("
+            + this.h.value + ","
+            + this.s.value + "%,"
+            + this.l.value + "%,"
+            + this.a.value + ")"
+        );
+    }
+});
+
+color.Const = action.BaseRunner.derive({
+    constructor: function Const(color) {
+        this.color = color;
+    },
+    
+    toString: function() {
+        return this.color.toString();
+    }
+});
+
+//
+// value - running 1-dimensional quantities.
+//
+var value = namespace();
+
+value.Runnable = action.LeafRunner.derive({
+    __name__: "Runnable",
+    value: 0,
+    prevValue: null,
+    prevPrevValue: null,
+    
+    run: function() {
+        this.prevPrevValue = this.prevValue;
+        this.prevValue = this.value;
+        this.calcValue();
+        if (this._shift && typeof this._shift.run === "function") {
+            this._shift.run();
+            this.value += this._shift.value;
+        }
+    },
+    
+    calcValue: function() {
+    },
+
+    isFlat: function() {
+        return this.prevValue === this.value;
+    },
+
+    onFlat: function() {
+        return this.prevValue === this.value && this.prevValue !== this.prevPrevValue;
+    },
+
+    isChanging: function() {
+        return this.prevValue !== this.value;
+    },
+
+    onPhaseChange: function() {
+        return false;
+    },
+    
+    shift: function(runnable) {
+        if (typeof runnable === "number") {
+            runnable = new value.Const(runnable);
+        }
+        runnable._shift = this;
+        return runnable;
+    }
+});
+
+value.Integral = value.Runnable.derive({
+    constructor: function Integral(obj, initial) {
+        this.obj = obj;
+        this.baseValue = initial || 0;
+    },
+    
+    calcValue: function() {
+        this.obj.run();
+        this.baseValue = this.baseValue + this.obj.value;
+        this.value = this.baseValue;
+    }
+});
+
+value.Const = value.Runnable.derive({
+    constructor: function Const(value) {
+        this.baseValue = value;
+        this.prevValue = null;
+    },
+    
+    calcValue: function() {
+        this.value = this.baseValue;
+    }
+});
+
+// tracking values, and loops
+value.Track = value.Runnable.derive({
+    constructor: function Track(array) { // ([[0, 50], [50]])
+        this.init(array);
+    },
+
+    init: function(array) {
+        if (typeof array === "undefined") {
+            array = [[0]];
+        } else if (typeof array == "number") {
+            array = [[array]];
+        }
+        this.values = array;
+        this.k = 0;
+        this.i = 0;
+        this.speed = null;
+        this.prevSpeed = null;
+        this._setNext();
+        this.value = this.ground;
+    },
+    
+    _setNext: function() {
+        this.pair = this.values[this.k];
+        this.ground = this.pair[0];
+        this.duration = this.pair[1] || Infinity;
+        this.callback = this.pair[2];
+        this.k = (this.k + 1) % this.values.length;
+        this.nextPair = this.values[this.k];
+        this.nextValue = this.nextPair[0];
+        this.prevSpeed = this.speed;
+        this.speed = (this.nextValue - this.ground) / this.duration;
+    },
+
+    onPhaseChange: function() {
+        return this.prevSpeed !== null && this.i === 0; // exclude before first run case
+    },
+                
+    onPhaseChange2: function() {
+        return this.i === 0;
+    },
+                
+    calcValue: function() {
+        this.i += 1;
+        if (this.i >= this.duration) {
+            if (typeof this.callback === "function") {
+                this.callback.call();
+            }
+            this.i = 0;
+            this._setNext();
+        }
+        this.baseValue = this.i * this.speed + this.ground;
+        this.value = this.baseValue;
+    }
+    
+});
+
+
+// base class for wave-like values
+value.Wave = value.Runnable.derive(function(__super__) {
+    return {
+        constructor: function Wave(period, amplitude, initial) {
+            this.i = initial ? initial % period : 0;
+            this.period = period || 60;
+            this.amplitude = amplitude || 1;
+        },
+
+        onPhaseChange: function() {
+            return this.i === 0;
+        },
+        
+        run: function() {
+            this.i = (this.i + 1) % this.period
+            __super__.run.apply(this);
+        }
+    }
+});
+
+value.TriangleWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function TriangleWave() {
+            __super__.constructor.apply(this, arguments);
+            this.speed = this.amplitude * 4 / this.period;
+            this.calcValue();
+        },
+        
+        calcValue: function() {
+            if (this.i < this.period / 4) {
+                this.value = this.i * this.speed;
+            } else if (this.period / 4 <= this.i && this.i < this.period * 3 / 4) {
+                this.value = this.amplitude * 2 - this.i * this.speed;
+            } else {
+                this.value = -4 * this.amplitude + this.speed * this.i;
+            }
+        }
+    };
+});
+
+value.SineWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function SineWave(period, amplitude, initial) {
+            __super__.constructor.call(this, period, amplitude, initial);
+            this.freq = 2 * Math.PI / this.period;
+            this.calcValue();
+        },
+        
+        calcValue: function() {
+            return this.value = this.amplitude * Math.sin(this.freq * this.i);
+        }
+    };
+});
+
+value.SineWaveAbs = value.SineWave.derive(function(__super__) {
+    return {
+        __name__: "SineWaveAbs",
+
+        calcValue: function() {
+            return this.value = Math.abs(__super__.calcValue.call(this));
+        }
+    };
+});
+
+value.RandomWalk = value.Runnable.derive({
+    constructor: function RandomWalk(initial) {
+        this.baseValue = initial || 0;
+    },
+    
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() > 0.5 ? 1 : -1);
+        return this.value = this.baseValue;
+    }
+});
+
+value.BrownianMotion = value.Runnable.derive({
+    constructor: function RrownianMotion(initial, scale) {
+        this.baseValue = initial || 0;
+        this.scale = scale || 1;
+    },
+
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() * 2 - 1) * this.scale;
+        this.value = this.baseValue;
+    }
+});
+
+value.CenteredBrownianMotion = value.Runnable.derive({
+    constructor: function CenterdBrownianMotion(initial, scale, k) {
+        this.initial = initial || 0;
+        this.baseValue = initial || 0;
+        this.scale = scale || 1;
+        this.k = k || 0.01
+    },
+
+    calcValue: function() {
+        this.baseValue = this.baseValue + (Math.random() * 2 - 1) * this.scale;
+        this.baseValue -= (this.baseValue - this.initial) * this.k;
+        this.value = this.baseValue;
+    }
+});
+
+//
+// point - running 2-dimensional points.
+//
+var point = namespace();
+
+point.RandomWalk = action.LeafRunner.derive({
+    constructor: function RandomWalk(x, y) {
+        this.x = x;
+        this.y = y;
+    },
+    
+    run: function() {
+        this.calcValue();
+    },
+    
+    calcValue: function() {
+        if (Math.random() > 0.5) {
+            this.x += Math.random() > 0.5 ? 1 : -1;
+        } else {
+            this.y += Math.random() > 0.5 ? 1 : -1;
+        }
+    }
+});
+
+window.home = home;
+window.action = action;
+window.machine = machine;
+window.morph = morph;
+window.color = color;
+window.value = value;
+window.point = point;
+namespaced();
+})(window);
+
+    </script>
+    <style>
+
+      *{
+        margin:0;
+        padding:0;
+      }
+
+      div p {
+        font-size: normal;
+        font-weight: normal;
+      }
+
+      body {
+        font-family: monospace;
+      }
+
+      html, body {
+        height: 100%;
+      }
+
+      a {
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+    </style>
+    <meta charset="UTF-8"/>
+  </head>
+  <body onload="window.home.main();" bgcolor="black">
+    <div
+      id="container_main"
+      style="
+        top: 16px;
+        left: 152px;
+        position: absolute;
+        border: solid 16px hsl(206,50%,80%);
+        border-radius: 16px;">
+      <div
+        id="info_area"
+        style="
+          background: black;
+          color: white;
+          height: 100%;">
+        information.
+      </div>
+      <div
+        id="container_main_inner"
+        style="
+          width: 0;
+          height: 0;
+          position: absolute;
+          top: 0;
+          left: 0;
+          overflow: hidden;
+          -webkit-transition: 1s;
+          -moz-transition: 1s;">
+        <canvas
+          id="canvas_main"
+          width="300"
+          height="300"
+          style="position: absolute; left: 0; top: 0;">
+        </canvas>
+        <canvas
+          id="canvas_layer_map"
+          width="300"
+          height="300"
+          style="position: absolute; left: 0; top: 0;">
+        </canvas>
+        <canvas
+          id="canvas_layer_moogle"
+          width="300"
+          height="300"
+          style="position: absolute; left: 0; top: 0;">
+        </canvas>
+        <div
+          id="container_bubbler"
+          style="position: absolute; overflow: hidden; width: 100%; height: 100%;">
+        </div>
+        <canvas
+          id="canvas_layer_curtain"
+          width="300"
+          height="300"
+          style="position: absolute; left: 0; top: 0;">
+        </canvas>
+    
+        <div
+          id="container_fps"
+          style="
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 130px;
+            height: 130px;
+            overflow: hidden;
+            color: #000;
+            font-weight: normal;
+            background-color: #ccc;
+            opacity: 0.8;
+            display: block;
+            border-bottom-right-radius: 15px;
+            box-shadow: 2px 2px 5px #000;
+            font-family: 'menlo','monaco','courier','courier new';
+            font-size: 12px;">
+          <p
+            id="mapNameChip"
+            style="
+              postion: absolute;
+              width: 85px;
+              text-align: center;
+              background-color: hsl(206,80%,80%);
+              box-shadow: 2px 2px 5px #000;
+              padding-right: 4px;
+              padding-bottom: 2px;
+              margin-bottom: 5px;
+              border-bottom-right-radius: 5px;">fps25.html</p>
+          <p id="fps-meter">-</p>
+          <p id="fps-monitor">cnt: -<br>fps: -</p>
+          <p id="frame-wait" style="white-space: nowrap;">wait: -</p>
+          <p id="custom-field">keys: -</p>
+        </div>
+      </div><!-- id="container_main_inner" -->
+      <div
+        id="overlay"
+        style="
+          position: absolute;
+          width: 20px;
+          height: 240px;
+          background: black;
+          color: white;
+          overflow: hidden">
+        THE END
+      </div>
+    </div><!-- id="container_main" -->
+
+<!-- hidden data area start -->
+    <div id="data-area" style="display: none;">
+      <textarea id="tweets">
+I'm very close to...
+...ellipsis
+Some ads showing...
+...ellipsis
+Look! That's Ads! The City would be near!
+...ellipsis
+Ads show there. They are like almost nothing but in reality they maintain this world under the ground.
+...ellipsis
+limited short messages break unnessesary incovenience of communication.
+...ellipsis
+would like to create ROOMS!
+...ellipsis
+Next MAPS!
+...ellipsis
+map-camera-canvas integration,...? c'est difficile...
+...ellipsis
+the relation of Krile, the camera, the map and the canvases is very complicated and spaghetical.
+...ellipsis
+Is AOP just the paradigm for logging and locking?
+...ellipsis
+All entities in this program have four Aspects, namely, init, react, run, draw.
+...ellipsis
+Who manages What?
+...ellipsis
+In different aspects the relation of belongingness is different,
+that is the fundamental reason of the difficulty of the situation.
+...ellipsis
+Camera sees the x,y of Krile in run aspect, Krile sees Map in react aspect,
+Canvases sees Map in init aspect, Canvases see Camera in draw aspect.
+...ellipsis
+All:Init --> loop:(All:React --> All:Run ---> All:Draw)
+...ellipsis
+The division of aspects except init is deliberate, not necessary.
+three is not necessary number of aspect division, two, four or more is possible.
+...ellipsis
+namespace problem: what information should be visible by the global scope, and what should be not?
+...ellipsis
+Aspect is interface (in Java sense) which all classes concerned in the situation should implement.
+...ellipsis
+React: interaction with inputs, world states or other object outside the object itself.
+Run: calculation of values inside the object.
+Draw: drawing to canvases, doms or any other visible parts.
+...ellipsis
+MQing between objects.
+...ellipsis
+Message: MessageSubject:String, MessageContent:Object.
+...ellipsis
+MessageContent proccessed MessageSubject-specific way.
+...ellipsis
+MessageContent is Data Transfer Object. typically, it contains callback for next messaging proccess.
+...ellipsis
+message: head:String, body:Object(Dto, typically contains 'callback');
+...ellipsis
+typical member ordering of full equiped runner node:
+1. constructor, 2. init, 3. react, 4. Listening, 5. custom methods, 6. run, 7. draw.
+...ellipsis
+it may be possible to unify react aspect and listen aspect, these two seem similar.
+...ellipsis
+struggling with Object Addressing Problem.
+...ellipsis
+thinking about send back the message protocol.
+ms.callback = funnction(){} ?
+ms.callback = {head: "XX", ...} ?
+ms.callback = "XX", ms.callbackArgs = [...] ?
+...ellipsis
+three aspects of programming: solving, designing, hacking.
+In solving aspect, the goal of programming is (logically) explicit. And
+reaching the goal is only one objective of writing source code. In this
+aspect, the programmers are completely logical.
+When designing, the goal itself doesn't matter, but the way reaching the goal
+is important. How elegantly reaching goal is the only objective of writing
+source in this aspect.
+Hacking is very different from the other aspects of programming. When hacking
+some systems, programmers doesn't know about the systems' internals. Hacking
+is the programming for knowing new information about targets, discoverying
+some facts about the target systems or extracting some information from the
+target systems. Hacking is the programming for discovery and is really
+creative category of programming.
+...ellipsis
+resource.ja_JP.js
+resource.en_US.js
+resource.en_UK.js
+...ellipsis
+producing trivial maps.
+...ellipsis
+TODO:
+- notifications clean up
+- information panels clean up and enhancement.
+- conversation area. wide stretched box on the bottom of screen.
+- conversation mode. fullscreen conversation mode.
+...ellipsis
+TODO:
+- point annotation(how)
+- generate maps - done.
+...ellipsis
+make players have something strange like #?!*~/+4
+...ellipsis
+make short data messaging criteria for which certain type of map creation have
+special value.
+...ellipsis
+messaging and its effect.
+basically the messaging and its effect are asynchronous. The effect (reaction
+of message) is not always immediate after messaging.
+...ellipsis
+message analysis.
+message: transed data, info subject, info target(s), messaging method, message
+effects,
+var ms = new Message({
+    subject: "label"
+    from: this,
+    to: that,
+    content: "xxx",
+    back: new Message({
+        subject: "xxx",
+        from: that,
+        to: this,
+        content: "abc"
+    })
+});
+ms.send();
+...ellipsis
+xmlizing tile types.
+...ellipsis
+If some maps are valuable and some are not, then users have a fun to make good
+maps.
+...ellipsis
+data transcendentality, message transcendentality.
+...ellipsis
+usually data have tree structures.
+...ellipsis
+In usual messaging services, messages' tree structures are constructed in the
+manner of natural languages.
+...ellipsis
+type of message, type of the tool for messaging.
+...ellipsis
+dispatching moogles from me. (bhava message)
+moogles move along the some algorithm.
+...ellipsis
+object limits
+1 player 30 charactors limited, platinum plan -> 500 characters!
+1 player 600 mob limited, gold plan -> 9000 mobs!
+1 player 900 assets limited, bronze plan -> 12000 assets!
+1 player 11 private map limited, silver plan -> 100 private maps!
+...ellipsis
+share the fps Specific History.
+...ellipsis
+trans-imagine
+...ellipsis
+asset idea: Death Box
+- if Mob enter into Death Box, then it dies. (inspired by Befunge's @)
+...ellipsis
+time to think seriously about MobML and AssetML.
+Those describe how mobs move and how assets behave, respectively.
+...ellipsis
+connect asset symbol and asset definition.
+...ellipsis
+Lenna = Uta
+...ellipsis
+left-clockwise, clock-clockwise
+...ellipsis
+symbol-putting strategies:
+- A A A ...
+- A B A B A...
+- A B C B A B C B A ...
+- state 0 A, state 1 B, state 2 C, state 3 D
+symbol eating strategies:
+- eat always (SYM -> 0)
+...ellipsis
+symbol histogram.
+      </textarea>
+    </div>
+<!-- hidden data area end -->
+
+    <div id="doc-zone" style="float: right; color: white; ">
+      <div
+        style="
+          background: url(tweet_bubble.png) no-repeat;
+          width; 480px;
+          height: 24px;
+          color: #2A7090;
+          line-height: 20px;
+          padding: 0px 0px 0px 4px;
+          margin: 0px 0px 3px 0px;">
+        modern browser required.
+      </div>
+      <img src="ff5krile.png" /><img src="ff5moogle.png" />
+      <br />
+      /quake: earth quake.
+      <br />
+      /fade: fade in/out
+      <br />
+      /speed: speed change.
+      <br /> 
+      ARROWS: move up/down/left/right.
+      <br />
+      Alt + S: speed change.
+      <br />
+      Alt + Z: screen on/off
+      <br />
+      Alt + N: toggle fps monitor
+      <br />
+      Alt + [Number]: create a moogle.
+      <br />
+      Alt + G: create many spheres.
+      <br />
+      [ESC]: game stop/restart
+      <br />
+      ----
+    </div>
+    <!-- AdSense Area -->
+    <div
+      id="leftAds"
+      style="
+        width: 120px;
+        height: 600px;
+        position: absolute;
+        left: 16px;
+        top: 16px;
+        border: solid 16px hsl(208, 50%, 80%);
+        border-top-left-radius: 16px;
+        border-bottom-left-radius: 16px;
+        border-bottom-right-radius: 16px;
+        padding: 0px;">
+      <script type="text/javascript">
+        google_ad_client = "ca-pub-3872994406664392";
+        google_ad_slot = "0555237545";
+        google_ad_width = 120;
+        google_ad_height = 600;
+      </script>
+      <script
+        type="text/javascript"
+        _src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
+      </script>
+    </div>
+    <div style="position: absolute; left: 776px; top: 400px; width: 300px;">
+      <form
+        id="say-form"
+        onsubmit="
+          a = byId('input-say');
+          home.ms.cmdp.message({head:'CMD', cmd: a.value});
+          a.value = '';
+          return false;">
+      <input
+        type="text"
+        size="12"
+        placeholder="♪"
+        style="
+          height: 57px;
+          font-size: large;
+          border: solid 0px;
+          border-radius: 9px;
+          padding-left: 10px;
+          padding-right: 10px;"
+        id="input-say" />
+      <button
+        id="sayButton"
+        onclick="
+          a = byId('input-say');
+          home.ms.cmdp.message({head:'CMD', cmd: a.value});
+          a.value = '';
+          return false;"
+        style="
+          width: 57px;
+          height: 57px;
+          border-radius: 9px;
+          background-color: hsl(206,50%,80%);
+          border: solid 0px;">SAY</button>
+      </form>
+    </div>
+    <div style="
+      position: absolute;
+      left: 776px;
+      top: 160px;
+      width: 171px;">
+      <button
+        id="up"
+        ontouchstart="home.vkeyInput[this.id] = 1;"
+        ontouchend="home.vkeyInput[this.id] = 0;"
+        onmousedown="home.vkeyInput[this.id] = 1;"
+        onmouseup="home.vkeyInput[this.id] = 0;"
+        style="
+          width: 57px;
+          height: 57px;
+          border-radius: 9px;
+          background-color: hsl(206,50%,80%);
+          border: solid 0px;
+          position: absolute;
+          left: 57px;
+          top: 0px;">北</button>
+      <button
+        id="down"
+        ontouchstart="home.vkeyInput[this.id] = 1;"
+        ontouchend="home.vkeyInput[this.id] = 0;"
+        onmousedown="home.vkeyInput[this.id] = 1;"
+        onmouseup="home.vkeyInput[this.id] = 0;"
+        style="
+          width: 57px;
+          height: 57px;
+          border-radius: 9px;
+          background-color: hsl(206,50%,80%);
+          border: solid 0px;
+          position: absolute;
+          left: 57px;
+          top: 114px;">南</button>
+      <button
+        id="left"
+        ontouchstart="home.vkeyInput[this.id] = 1;"
+        ontouchend="home.vkeyInput[this.id] = 0;"
+        onmousedown="home.vkeyInput[this.id] = 1;"
+        onmouseup="home.vkeyInput[this.id] = 0;"
+        style="
+          width: 57px;
+          height: 57px;
+          border-radius: 9px;
+          background-color: hsl(206,50%,80%);
+          border: solid 0px;
+          position: absolute;
+          left: 0px;
+          top: 57px;">西</button>
+      <button
+        id="right"
+        ontouchstart="home.vkeyInput[this.id] = 1;"
+        ontouchend="home.vkeyInput[this.id] = 0;"
+        onmousedown="home.vkeyInput[this.id] = 1;"
+        onmouseup="home.vkeyInput[this.id] = 0;"
+        style="
+          width: 57px;
+          height: 57px;
+          border-radius: 9px;
+          background-color: hsl(206,50%,80%);
+          border: solid 0px;
+          position: absolute;
+          left: 114px;
+          top: 57px;">東</button>
+    </div>
+
+    <div
+      id="footer"
+      style='
+        height: 22px;
+        line-height: 22px;
+        font-size: 12px;
+        width: 100%;
+        color: white;
+        background: #444;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        vertical-algin: middle;
+        display: table-cell;
+        text-align: center;
+        letter-spacing: 1px;
+        font-family: "times";'>
+      <p
+        style="
+          text-shadow: -1px -1px 1px #222;";>
+        COPYRIGHT (C) 2011
+        <a
+          href="http://tkimg.com/"
+          target="_blank"
+          style="
+            color: white;">TRANS-IMAGINEERING PROGRAMMING FORCE, INC.</a>
+        ALL RIGHTS RESERVED.
+      </p>
+    </div>
+  </body>
+</html>
+<!-- TRANS-IMAGINEERING PROGRAMMING FORCE, INC. -->
+<!-- TOKYO TRANS-IMAGINEERING LAB, INC. -->
+<!-- TOKYO IMAGINEERING, INC.-->

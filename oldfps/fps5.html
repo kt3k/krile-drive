@@ -1,0 +1,176 @@
+<!doctype html>
+
+<html>
+
+<head>
+<title>fps5.html</title>
+
+<script>
+
+//
+// global elements
+//
+var pi = Math.PI;
+var sin = Math.sin;
+var cos = Math.cos;
+
+var doc = document;
+var byId = function(id) {
+    if (typeof id == 'string') { return doc.getElementById(id); }
+    return id;
+}
+
+Function.prototype.ext = function(Class){
+    this.prototype = new Class;
+    this.prototype.constructor = this;
+}
+
+//
+// main namespace (zgog)
+//
+var top_ = {};
+
+top_.main = function() {
+    this.sce0 = new Scene0;
+    this.fpsmeter = new FPSmeter;
+    setInterval("top_.run()", 16.6666);
+    setInterval("top_.fpsmeter.writefps()", 1000);
+    return;
+}
+
+top_.run = function () {
+    this.fpsmeter.run();
+    this.sce0.run();
+}
+
+top_.Task = function() {
+    this.subtasks = new Array;
+    this.age = 0;
+    this.alive = 1;
+    this.isdead = 0;
+    this.zombie = 0;
+    this.lifespan = 1000;
+}
+top_.Task.prototype = {};
+top_.Task.prototype.constructor = top_.Task;
+top_.Task.prototype.run = function() {
+    if (this.alive) {
+        this.rendering.run();
+    }
+    this.age += 1;
+    this.chkalive();
+    this.gc();
+}
+top_.Task.prototype.chkalive = function() {
+    if (this.isdead()) {
+        this.alive = 0;
+    }
+}
+top_.Task.prototype.isdeadf = function() {
+    return this.age > this.lifespan;
+}
+top_.Task.prototype.die = function() {
+    this.alive = 0;
+}
+top_.Task.prototype.gc = function() {
+    for (var i in this.subtasks) {
+        if (this.subtasks[i].isdead) {
+            delete this.subtasks[i];
+        }
+    }
+}
+
+top_.TaskArray = function() {
+}
+
+var FPSmeter = function() {
+    this.elem = byId("fps-meter");
+    this.elem_ = byId("fps-monitor");
+    this.i = 0;
+    return this;
+}
+FPSmeter.prototype = {};
+FPSmeter.prototype.run = function() {
+    this.i += 1;
+    this.elem.innerHTML = this.i.toString();
+    this.elem.style.opacity = Math.abs(Math.sin(this.i/100));
+    return;
+}
+FPSmeter.prototype.writefps = function() {
+    this.elem_.innerHTML = "fps: " + this.i.toString();
+    this.i = 0;
+    return;
+}
+
+var DataTask = function(){
+};
+DataTask.prototype = {};
+DataTask.prototype.constructor = DataTask;
+DataTask.prototype.run = function() {
+};
+
+function Scene0() {
+    this.age = 0;
+    this.k = 1;
+    this.alpha = 0.5;
+    this.image = new Image;
+    this.image.src = "dark.jpg";
+    this.dom = document.getElementById("indicator");
+    this.ctx = this.dom.getContext("2d");
+    this.lifespan = 120;
+    return this;
+}
+Scene0.prototype = {};
+Scene0.prototype.constructor = Scene0;
+Scene0.prototype.run = function() {
+    this.age += 1;
+    this.ctx.clearRect(0,0,300,300);
+    if (this.k) {
+        this.alpha += 0.03;
+    } else {
+        this.alpha -= 0.03;
+    }
+    if (this.alpha > 1.2) {
+        this.alpha = 1.2;
+        this.k = 0
+    }
+    if (this.alpha < -0.2) {
+        this.alpha = -0.2;
+        this.k = 1;
+    }
+    this.ctx.drawImage(this.image, 150 + cos(2 * this.alpha) * 100, 150 + sin(pi * this.alpha) * 100 , 300, 300, 0, 0, 300, 300);
+    this.ctx.fillStyle = "hsla(" + this.age.toString() + ",25%,50%," + this.alpha.toString() + ")";
+    this.ctx.fillRect(0,0,300,300);
+    if (this.age > this.lifespan) {
+        this.run = function() {};
+    }
+}
+
+</script>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+}
+
+div p {
+    font-size: normal;
+    font-weight: normal;
+}
+</style>
+
+</head>
+
+<body onload="top_.main();">
+
+<canvas id="indicator" width="300" height="300" style="position: absolute; left: 0; top_: 0;"></canvas>
+
+<div style="position: absolute; left: 0; right: 0;">
+  <p id="fps-meter">0</p>
+  <p id="fps-monitor">fps: -</p>
+</div>
+
+</body>
+
+</html>

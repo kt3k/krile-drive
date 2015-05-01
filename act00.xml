@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<scml>
+  <act id="1">
+    <s>:p</s>
+    <m type="move" speed="1">u</m>
+    <n>2</n>
+  </act>
+  <act id="2">
+    <s>:p</s>
+    <m type="stay" dur="16">..</m>
+    <n>3</n>
+  </act>
+  <act id="3">
+    <s>:p</s>
+    <m type="move" speed="1">d</m>
+    <nx>4</nx>
+  </act>
+  <act id="4">
+    <s>:p</s>
+    <mt type="stay" dur="16">..</mt>
+    <nx>5</nx>
+  </act>
+  <act id="101">
+    <sj>:p</sj>
+    <mt type="rotate" speed="0.25">RLRRLLR</mt>
+    <nx>102</nx>
+  </act>
+  <act id="102">
+    <sj>:p</sj>
+    <mt type="jump" repeat="2" />
+    <nx>103</nx>
+  </act>
+  <act id="103">
+    <sj>:p</sj>
+    <mt type="say">Hello, world, from act00.xml!</mt>
+  </act>
+  <act id="104">
+  </act>
+</scml>
+<!--
+calc the max of all types of mts.
+
+possible subjct types:
+- actor
+- camera
+- infoBubble
+- scene
+
+special symbol stuff:
+:p
+  protagonist (actorTable.getProt())
+:camera
+  camera (home.ms.camera)
+:scene
+  sceneManager (home.ms.sceneChars)
+:info
+  info bar (home.ms.sceneChars.plate)
+mob[n]
+  moogle indexed n (home.ms.moogles.children[n])
+light[n]
+  light indexed n (home.ms.lights.children[n])
+label
+  actor labeled 'label' (home.ms.sceneChars.getActor())
+
+- trans-imagining the market.
+- who have data? who have value.
+
+symbols:
+- ok symetry:
+  - D4
+  - D5
+  - pointwise
+  - mirror
+  - T
+- ng symetry:
+  - D6
+  - S3
+  - C3, C4, C5, ...
+
+oto ya:
+- http://osabisi.sakura.ne.jp/m2/
+- http://nochiko.websozai.jp/
+
+-->

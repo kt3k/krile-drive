@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<scml>
+  <act id="1">
+    <s>:scene</s>
+    <action type="beget">
+      <x>30</x>
+      <y>30</y>
+      <name>lenna</name>
+      <sprite>ff5lenna.png</sprite>
+    </action>
+    <next>2</next>
+  </act>
+  <act id="2">
+    <s>lenna</s>
+    <action type="move">
+      <speed>2</speed>
+      <string>druldruldruldrrruurrd</string>
+    </action>
+    <next>3</next>
+  </act>
+  <act id="3">
+    <s>lenna</s>
+    <action type="rotate">
+      <speed>0.25</speed>
+      <string>RRLL</string>
+    </action>
+    <next>3-1</next>
+  </act>
+  <act id="3-1">
+    <s>:scene</s>
+    <action type="beget">
+      <x>35</x>
+      <y>32</y>
+      <name>barts</name>
+      <sprite>images/ff5barts.png</sprite>
+    </action>
+    <next>3-2</next>
+  </act>
+  <act id="3-2">
+    <s>barts</s>
+    <action type="move">
+      <string>rddlu</string>
+      <speed>1</speed>
+    </action>
+    <next>3-3</next>
+  </act>
+  <act id="3-3">
+    <s>barts</s>
+    <action type="say">
+      <string>hello, lenna!</string>
+    </action>
+    <next>4</next>
+  </act>
+  <act id="4">
+    <s>lenna</s>
+    <action type="say">
+      <string>hello, barts!</string>
+    </action>
+    <next>5</next>
+  </act>
+  <act id="5">
+    <s>:camera</s>
+    <action type="target">
+      <dur>30</dur>
+      <name>lenna</name>
+    </action>
+    <next>5-1</next>
+  </act>
+  <act id="5-1">
+    <s>:scene</s>
+    <action type="scape">
+      <mode>half</mode>
+      <dur>80</dur>
+    </action>
+    <next>5-2</next>
+  </act>
+  <act id="5-2">
+    <s>:narrator</s>
+    <action type="narrate">
+      <words>Here starts a story.</words>
+    </action>
+    <next>6</next>
+  </act>
+  <act id="6">
+    <s>lenna</s>
+    <action type="stay">
+      <dur>0</dur>
+    </action>
+    <next>6-3</next>
+  </act>
+  <act id="6-3">
+    <s>:scene</s>
+    <action type="stay">
+      <dur>80</dur>
+    </action>
+    <next>7</next>
+  </act>
+  <act id="7">
+    <s>lenna</s>
+    <action type="die" />
+    <next>7-1</next>
+  </act>
+
+  <act id="7-1">
+    <s>barts</s>
+    <action type="die" />
+    <next>7-2</next>
+  </act>
+  <act id="7-2">
+    <s>:narrator</s>
+    <action type="narrate">
+      <words>Unfortunately, they are dead.</words>
+    </action>
+    <next>7-3</next>
+  </act>
+  <act id="7-3">
+    <s>:scene</s>
+    <action type="scape">
+      <mode>neutral</mode>
+      <dur>80</dur>
+    </action>
+    <next>7-4</next>
+  </act>
+  <act id="7-4">
+    <s>:narrator</s>
+    <action type="clear" />
+    <next>8</next>
+  </act>
+  <act id="8">
+    <s>:camera</s>
+    <action type="quake">
+      <magnitude>6</magnitude>
+      <dur>45</dur>
+    </action>
+    <next>9</next>
+  </act>
+  <act id="9">
+    <s>:camera</s>
+    <action type="target">
+      <name>:p</name>
+      <dur>45</dur>
+    </action>
+    <next>10</next>
+  </act>
+  <act id="10">
+    <s>:camera</s>
+    <action type="quake">
+      <magnitude>0</magnitude>
+      <dur>45</dur>
+    </action>
+    <next>1</next>
+  </act>
+</scml>
+<!--
+type camera:
+  - label: :camera
+type scene:
+  - label: :scene
+type actor:
+  - label: :p identifier :l[N] :m[N]
+
+act types for scene:
+  - beget:
+    - x: {integer} x coordinate
+    - y: {integer} y coordinate
+    - string: {string} new actors name
+act types for actor:
+  - move:
+    - string: {string} moving sequence
+    - speed: {integer} moving speed (default: 1)
+  - rotate:
+    - string: {string} rotate sequence
+    - speed: {float} rotate speed (default: 0.25)
+  - say:
+    - string: {string} comment
+  - stay:
+    - dur: {integer} duration (default: 60)
+  - die:
+    -
+  - talk:
+    - string: {string} content of talk
+act types for camera:
+  - target:
+    - string: {string} target (actor id)
+  - quake:
+    - magnitude: {integer} magnitude (default: 4)
+    - dur: {integer} duration to reach the magnitude (default: 60)
+  - scape:
+    - width: {integer} scape's width (default: SCREEN_WIDTH)
+    - height: {integer} scape's height (default: SCREEN_HEIGHT)
+    - kind: {symbol} top, left, right, bottom, center, middle
+act types for fps panel:
+  - show:
+    - dur: {integer} duration to show (default: 20)
+  - hide:
+    - dur: {integer} duration to hide (default: 20)
+
+
+no money moves beyond the human interactions because money is paid and received by human.
+-->

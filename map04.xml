@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mapml>
+  <title>map 04</title>
+  <tiles>
+    <sym class="1" passable="false" />
+    <sym class="0" />
+    <sym class="." />
+  </tiles>
+  <enter>
+    <gate name="A" x="10" y="3"/>
+  </enter>
+  <exit>
+    <gate name="A" href="map05.xml#A" />
+  </exit>
+  <row>....1111111111111....</row>
+  <row>....1000000000001....</row>
+  <row>....1000000000001....</row>
+  <row>....100000A000001....</row>
+  <row>111110000000000011111</row>
+  <row>100000000000000000001</row>
+  <row>100001111101111100001</row>
+  <row>100001...101...100001</row>
+  <row>100001.1110111.100001</row>
+  <row>100001.1000001.100001</row>
+  <row>111111.1000001.111111</row>
+  <row>.......1000001.......</row>
+  <row>.......1000001.......</row>
+  <row>.......1000001.......</row>
+  <row>.......1111111.......</row>
+</mapml>

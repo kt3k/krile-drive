@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assetml>
+  <asset>
+  	<symbol>.</symbol>
+  	<events>
+  		<onEnter></onEnter>
+  		<onReach></onReach>
+  	</events>
+  	<view>
+  	</view>
+  </asset>
+  <asset>
+  	<symbol>0</symbol>
+  	<events>
+  		<onEnter></onEnter>
+  		<onReach></onReach>
+  	</events>
+  	<view>
+  	  <box type="BogoBox" frame="[2,3,4]" color="Floor">
+  	</view>
+  </asset>
+  <asset>
+  	<symbol>1</symbol>
+  	<passable>false</passable>
+  	<events>
+  		<onEnter></onEnter>
+  		<onReach></onReach>
+  	</events>
+  	<view>
+  	  <box type="BogoBox" frame="1" color="Wall">
+  	</view>
+  </asset>
+  <asset>
+  	<symbol>[A-Z]</symbol>
+  	<passable>false</passable>
+  	<events>
+  		<onEnter></onEnter>
+  		<onReach></onReach>
+  	</events>
+  	<view>
+  	  <box type="Disk" frame="4" color="CounterHue">
+  	  <box type="Circle" frame="1" color="CounterHue">
+  	</view>
+  </asset>
+</assetml>

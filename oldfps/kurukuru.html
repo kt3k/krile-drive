@@ -1,0 +1,673 @@
+<!doctype html>
+<html>
+  <head>
+    <title>kurukuru.html</title>
+    <script>
+//
+// global elements
+//
+var byId = function(id) {
+    if (typeof id == 'string') {
+        return document.getElementById(id);
+    }
+    return id;
+};
+
+var mixin = function(target, source) {
+    for (var i in source) {
+        target[i] = source[i];
+    }
+};
+
+if (typeof String.prototype.trim === "undefined") {
+    String.prototype.trim = function() {
+        return this.replace(/^\s+|\s+$/g, "");
+    }
+}
+
+Function.prototype.derive = function(extension){
+    var __super__ = this.prototype;
+    var x, y;
+    
+    // 1. get extension
+    var obj = (typeof extension === "function" ? extension(__super__) : extension);
+    
+    // 2. define proxy function
+    x = function() {};
+    x.prototype = __super__;
+    
+    // 3. set up the constructor
+    y = obj.hasOwnProperty("constructor") ? obj.constructor : function() {__super__.constructor.apply(this, arguments);};
+    y.__super__ = __super__;
+    y.prototype = new x;
+    y.prototype.constructor = y;
+    
+    // 4. extend prototype
+    mixin(y.prototype, obj);
+    
+    return y;
+};
+
+Math.random.choice = function(array) {
+    return array[parseInt(this() * array.length)];
+};
+
+Math.random.range = function(n){
+    return parseInt(this() * n);
+};
+
+var parsePx = function(number) {
+    return parseInt(number).toString() + "px";
+};
+
+Number.prototype.toPx = function() {
+    return parsePx(this);
+};
+
+document.byId = document.getElementById;
+
+//
+// event settings
+//
+document.onkeydown = function(e) {home.changeKey(e);};
+document.onkeyup = function(e) {home.changeKey(e);};
+
+//
+// home - main namespace
+//
+var FPS = 20;
+
+var home = {
+
+    SCREEN_WIDTH: screen.width,
+    SCREEN_HEIGHT: screen.height,
+    
+    FRAME_RATE: FPS,
+    FRAME_LENGTH: 1000/FPS,
+
+    main: function() {
+        this.fwmeter = new action.FWMeter(home.FRAME_LENGTH);
+        this.fpsmeter = new action.FPSMeter(); 
+        this.kdump = new action.KeyDumper();
+        this.kim = new action.KeyInputManager(home.keyInput);
+
+        this.sce0 = new action.Scene0();
+                
+        this.toggleMain();
+
+        setInterval("home.fpsmeter.writefps()", 1000);
+    },
+    
+    toggleMain: function() {
+        if (this.mainHandle) {
+            clearInterval(this.mainHandle);
+            delete this.mainHandle;
+        } else {
+            this.mainHandle = setInterval("home.run()", home.FRAME_LENGTH);
+        }
+    },
+    
+    run: function () {
+        this.fwmeter.start();
+
+        this.fpsmeter.run();
+        this.kdump.run();
+        this.kim.run();
+        
+        this.sce0.run();
+
+        this.fwmeter.stop();
+    },
+    
+    keyInput: [0, 0, 0, 0, 0, 0, 0], // left, right, up, down, start/stop
+    changeKey: function(event) {
+        home.keyInput[event.keyCode] = event.type === "keydown" ? 1 : 0;
+         if (event.type == "keydown" && event.keyCode == 32) home.toggleMain();
+    }
+};
+
+var action = {};
+
+action.KeyInputManager = Object.derive({
+    constructor: function(keyInput) {
+        this.keyInput = keyInput;
+        this.prevKeyInput = this.keyInput.slice(0);
+        this.currKeyInput = this.keyInput.slice(0);
+    },
+    
+    run: function() {
+        this.prevKeyInput = this.currKeyInput;
+        this.currKeyInput = this.keyInput.slice(0);
+    },
+    
+    toggleOn: function(key) {
+        return this.currKeyInput[key] && !this.prevKeyInput[key];
+    },
+    
+    toggleOff: function(key) {
+        return !this.currKeyInput[key] && this.prevKeyInput[key];
+    },
+    
+    key: function(key) {
+        return this.currKeyInput[key];
+    }
+});
+
+action.RunnerNode = Object.derive({
+    constructor: function(args) {
+        for (var i in args) {
+            this[i] = args[i];
+        }
+        this.runnerCheck();
+    },
+
+    runnerCheck: function() {
+        this.runners = new Array();
+        for (var i in this) {
+            if (typeof this[i].run === "function") {
+                this.runners.push(this[i]);
+            }
+        }
+    },
+    
+    run: function() {
+        this.runnersRun();
+    },
+    
+    runnersRun: function() {
+        for (var i = 0; i < this.runners.length; i++) {
+            this.runners[i].run();
+        }
+    }
+});
+
+action.FWMeter = Object.derive({
+    constructor: function(frame_length) {
+        this.dom = byId("frame-wait");
+        this.frame_length = frame_length;
+        this.t = 0;
+    },
+    
+    start: function() {
+        this.t = (new Date).getTime();
+    },
+    
+    stop: function() {
+        var diff = (new Date()).getTime() - this.t;
+        var wait = this.frame_length - diff;
+        this.dom.innerHTML = 'wait: ' + wait.toPrecision(7).toString();        
+    }
+});
+    
+action.FPSMeter = Object.derive({
+    constructor: function() {
+        this.elem = byId("fps-meter");
+        this.elem_ = byId("fps-monitor");
+        this.pulse = new value.TriangleWave(160, 9, 40);
+        this.wave = new value.SineWaveAbs(160, 9, 40);
+        this.i = 0;
+        this.j = 0;
+    },
+    
+    run: function() {
+        this.i += 1;
+        this.pulse.run();
+        this.wave.run();
+        this.elem.innerHTML = this.i.toString() + "<br>" + this.pulse.value.toPrecision(7).toString() + "<br>" + this.wave.value.toPrecision(7).toString();
+        this.elem.style.opacity = Math.abs(Math.sin(this.i/100))*0.7+0.2;
+    },
+    
+    writefps: function() {
+        this.j += 1;
+        this.elem_.innerHTML = "cnt: " + this.j.toString() + "<br>fps: <span style='color: #0f0; '>" + this.i.toString() + "</span>";
+        this.i = 0;
+    }
+});
+
+action.Scene0 = action.RunnerNode.derive({
+    constructor: function() {
+        this.age = 0;
+        this.dom = {};
+        this.dom.container_main = document.getElementById("container_main");
+        this.dom.container_main.style.width = home.SCREEN_WIDTH.toPx();;
+        this.dom.container_main.style.height = home.SCREEN_HEIGHT.toPx();
+        this.dom.canvas_main = document.getElementById("canvas_main");
+        this.dom.canvas_main.width = home.SCREEN_WIDTH;
+        this.dom.canvas_main.height = home.SCREEN_HEIGHT;
+        this.ctx = this.dom.canvas_main.getContext("2d");
+        this.ctx.save();
+        this.dom.container_fps = document.getElementById("container_fps");
+        
+        this.x = 140;
+        this.y = 210;        
+        this.xy_speed = 1;
+        
+        this.fpsToggle = 1;
+        
+        FLY_MAX = 500;
+        this.flies = new Array(FLY_MAX);
+        HUE = parseInt(Math.random.range(360));
+        HUE2 = parseInt(Math.random.range(360));
+        for (var i=0; i<FLY_MAX; i++) {
+            this.flies[i] = new action.Fly(
+                Math.random.range(home.SCREEN_WIDTH),
+                Math.random.range(home.SCREEN_HEIGHT),
+                this.ctx,
+                24, 
+                Math.random() < 0.3 ? HUE : HUE2);
+        }
+        this.left = new value.Const(0);
+        this.runnerCheck();
+    },
+    
+    run: function() {
+        this.age += 1;
+        this.dom.container_main.style.left = this.left.value.toPx();
+        this.runnersRun();
+        
+        if (home.kim.key(37)) this.x -= this.xy_speed;
+        if (home.kim.key(39)) this.x += this.xy_speed;
+        if (home.kim.key(38)) this.y -= this.xy_speed;
+        if (home.kim.key(40)) this.y += this.xy_speed;
+        
+        if (home.kim.toggleOn(67)) {
+            this.dom.container_fps.style.display = this.fpsToggle ? "block" : "none";
+            this.fpsToggle ^= 1;
+        }
+        
+        this.ctx.clearRect(0, 0, home.SCREEN_WIDTH, home.SCREEN_HEIGHT);
+                
+        for (var i = 0; i < this.flies.length; i++) {
+            this.flies[i].run();
+            this.flies[i].draw();
+        }
+    }
+});
+
+action.KeyDumper = Object.derive({
+    constructor: function() {
+        this.age = 0;
+        this.x = 200;
+        this.y = 0;
+        this.dom = byId("custom-field");
+    },
+    
+    run: function() {
+        this.age += 1;
+        var a = [];
+        for (var i = 0; i < home.keyInput.length; i++) {
+            if (home.keyInput[i]) a.push(i);
+        }
+        this.dom.innerHTML = "keys: " + a.toString();
+    }
+});
+
+action.Fly = Object.derive({
+    constructor: function(x, y, pen, size, hue) {
+        this.point = new point.RandomWalk(x, y);
+        this.prevPoint = {};
+        this.pen = pen;
+        this.size = size || 1;
+        this.half_size_neg = - this.size / 2;
+        this.color = new color.HSLA({
+            h: new value.Const(hue).shift(new value.X(8)),
+            l: new value.SineWave(50, 49, Math.random.range(50)).shift(new value.Const(50)),
+            //s: new value.TriangleWave(400, 50, 80).shift(new value.Const(50)),
+            s: new value.SineWaveAbs(400, 98, 80).shift(new value.Const(1)),
+            a: new value.Const(1)
+        });
+        this.rot = new value.Integral(new value.Const(200));
+    },
+    
+    run: function() {
+        this.prevPoint.x = this.point.x;
+        this.prevPoint.y = this.point.y;
+        if (Math.random() < 0.8) this.point.run();
+        this.color.run();
+        this.rot.run();
+    },
+    
+    draw: function() {
+        //this.pen.strokeStyle = this.color.toString();
+        this.pen.fillStyle = this.color.toString();
+        this.pen.lineWidth = 4;
+        this.pen.save();
+        this.pen.translate(this.point.x, this.point.y);
+        this.pen.rotate(.001 * this.rot.value);
+        //this.pen.strokeRect(-this.size, -thi.size, this.size, this.size);
+        this.pen.fillRect(this.half_size_neg, this.half_size_neg, this.size, this.size);
+        this.pen.restore();
+    }
+});
+
+//
+// morph definitions, morph means any shape or value complex which represent any entity and render its body on a provided canvas.
+//
+var morph = {};
+
+morph.Rect = action.RunnerNode.derive({
+    constructor: function(args) {
+        this.i = 0;
+        for (var key in args) {
+            this[key] = args[key];
+        }
+        this.runnerCheck()
+    },
+        
+    draw: function() {
+        this.pen.fillStyle = this.color.toString();
+        this.pen.fillRect(this.x.value - this.w.value / 2, this.y.value - this.h.value / 2, this.w.value, this.h.value);
+    }
+});
+
+//
+// color definitions, a color means a point in the RGB color space, a point in the HSL color space or a point in any other color space.
+//
+var color = {};
+
+color.RGB = action.RunnerNode.derive({
+    constructor: function() {
+        this.r = args.r;
+        this.g = args.g;
+        this.b = args.b;
+        this.runnerCheck();
+    },
+    
+    toString: function() {
+        return "#"+this.r.value.toString()+this.g.value.toString()+this.b.value.toString();
+    }
+});
+
+color.HSL = action.RunnerNode.derive({
+    constructor: function(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+        this.runnerCheck();
+    },
+    
+    toString: function() {
+        return "hsl("+this.h.value.toString()+","+this.s.value.toString()+"%,"+this.l.value.toString()+"%)";
+    }
+});
+
+color.HSLA = action.RunnerNode.derive({
+    constructor: function(args) {
+        this.h = args.h;
+        this.s = args.s;
+        this.l = args.l;
+        this.a = args.a;
+        this.runnerCheck();
+    },
+        
+    toString: function() {
+        return "hsla("+this.h.value.toString()+","+this.s.value.toString()+"%,"+this.l.value.toString()+"%,"+this.a.value.toString()+")";
+    }
+});
+
+color.Const = Object.derive({
+    constructor: function(color) {
+        this.color = color;
+    },
+    
+    run: function() {
+    },
+    
+    toString: function() {
+        return this.color.toString();
+    }
+});
+
+//
+// value definitions, 'value' means 1-dimensional quantity which changes its value at any frame it runs.
+//
+var value = {};
+
+value.Runnable = Object.derive({
+    value: 0,
+    
+    run: function() {
+        this.calc_value();
+        if (this._shift && typeof this._shift.run === "function") {
+            this._shift.run();
+            this.value += this._shift.value;
+        }
+    },
+    
+    calc_value: function() {
+    },
+    
+    shift: function(runnable) {
+        if (typeof runnable === "Number") {
+            runnable = new value.Const(runnable);
+        }
+        runnable._shift = this;
+        return runnable;
+    }
+});
+
+value.Integral = value.Runnable.derive({
+    constructor: function(obj, initial) {
+        this.obj = obj;
+        this.baseValue = initial || 0;
+    },
+    
+    calc_value: function() {
+        this.obj.run();
+        this.baseValue = this.baseValue + this.obj.value;
+        this.value = this.baseValue;
+    }
+});
+
+value.X = value.Runnable.derive({
+     constructor: function(k, a) {
+         this.k = k || 1;
+         this.baseValue = a || 0;
+     },
+     
+     calc_value: function() {
+         this.baseValue += this.k;
+         this.value = this.baseValue;
+     }
+});
+
+value.Const = value.Runnable.derive({
+    constructor: function(value) {
+        this.raw_value = value;
+    },
+    
+    calc_value: function() {
+        this.value = this.raw_value;
+    }
+});
+
+value.Track = value.Runnable.derive(function(__super__) {
+     return {
+        constructor: function(array) { // ([0, 50], [ 
+            this.values = array;
+            this.k = 0;
+            this.i = 0;
+            this._setNext();
+        },
+        
+        _setNext: function() {
+            this.pair = this.values[this.k];
+            this.ground = this.pair[0];
+            this.duration = this.pair[1];
+            this.k = (this.k + 1) % this.values.length;
+            this.nextPair = this.values[this.k];
+            this.nextValue = this.nextPair[0];
+            this.speed = (this.nextValue - this.ground) / this.duration;
+        },
+                
+        calc_value: function() {
+            this.i += 1;
+            if (this.i >= this.duration) {
+                this.i = 0;
+                this._setNext();
+            }
+            this.baseValue = this.i * this.speed + this.ground;
+            this.value = this.baseValue;
+        }
+    }
+});
+
+value.Wave = value.Runnable.derive(function(__super__) {
+    return {
+        constructor: function(period, amplitude, initial) {
+            this.i = initial ? initial % period : 0;
+            this.period = period || 60;
+            this.amplitude = amplitude || 1;
+        },
+        
+        run: function() {
+            this.i = (this.i + 1) % this.period
+            __super__.run.apply(this);
+        }
+    }
+});
+
+value.TriangleWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function() {
+            __super__.constructor.apply(this, arguments);
+            this.speed = this.amplitude * 4 / this.period;
+            this.calc_value();
+        },
+        
+        calc_value: function() {
+            if (this.i < this.period / 4) {
+                this.value = this.i * this.speed;
+            } else if (this.period / 4 <= this.i && this.i < this.period * 3 / 4) {
+                this.value = this.amplitude * 2 - this.i * this.speed;
+            } else {
+                this.value = -4 * this.amplitude + this.speed * this.i;
+            }
+        }
+    };
+});
+
+value.SineWave = value.Wave.derive(function(__super__) {
+    return {
+        constructor: function(period, amplitude, initial) {
+            __super__.constructor.call(this, period, amplitude, initial);
+            this.freq = 2 * Math.PI / this.period;
+            this.calc_value();
+        },
+        
+        calc_value: function() {
+            return this.value = this.amplitude * Math.sin(this.freq * this.i);
+        }
+    };
+});
+
+value.SineWaveAbs = value.SineWave.derive(function(__super__) {
+    return {
+        calc_value: function() {
+            return this.value = Math.abs(__super__.calc_value.call(this));
+        }
+    };
+});
+
+value.RandomWalk = value.Runnable.derive({
+    constructor: function(initial) {
+        this.raw_value = initial || 0;
+    },
+    
+    calc_value: function() {
+        this.raw_value += Math.random() > 0.5 ? 1 : -1;
+        return this.value = this.raw_value;
+    }
+});
+
+//
+// point definitions, point means 2-dimensional quantity which changes its value at any frame they run.
+//
+var point = {};
+
+point.RandomWalk = Object.derive({
+    constructor: function(x, y) {
+        this.x = x;
+        this.y = y;
+    },
+    
+    run: function() {
+        this.calc_value();
+    },
+    
+    calc_value: function() {
+        if (Math.random() > 0.5) {
+            this.x += Math.random() > 0.5 ? 1 : -1;
+        } else {
+            this.y += Math.random() > 0.5 ? 1 : -1;
+        }
+    }
+});
+
+    </script>
+    <style>
+*{
+    margin:0;
+    padding:0;
+}
+
+div p {
+    font-size: normal;
+    font-weight: normal;
+}
+    </style>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  </head>
+  <body onload="home.main();" bgcolor="black">
+    <div id="container_main" style="position: absolute; width: 1024px; height: 512px; background-color: #000; ">
+      <canvas id="canvas_main" width="300" height="300" style="position: absolute; left: 0; top: 0;"></canvas>
+    </div>
+    <div id="container_fps" style="position: absolute; left: 0; top: 0; background-color: white; opacity: 0.5; display: none; ">
+      <p id="fps-meter">0</p>
+      <p id="fps-monitor">fps: -</p>
+      <p id="frame-wait">wait: msec</p>
+      <p id="custom-field"></p>
+    </div>
+    <textarea style="display: none; " id="document_narration">
+When I find myself in times of trouble
+Mother Mary comes to me
+Speaking words of wisdom, let it be.
+And in my hour of darkness
+She is standing right in front of me
+Speaking words of wisdom, let it be.
+Let it be, let it be.
+Let it be, let it be.
+Whisper words of wisdom, let it be.
+And when the broken hearted people
+Living in the world agree,
+There will be an answer, let it be.
+For though they may be parted there is
+Still a chance that they will see
+There will be an answer, let it be.
+Let it be, let it be.
+Let it be, let it be.
+Yeah, There will be an answer, let it be.
+Let it be, let it be.
+Let it be, let it be.
+Whisper words of wisdom, let it be.
+Let it be, let it be.
+Let it be, let it be.
+There will be an answer, let it be.
+Let it be, let it be.
+Let it be, let it be.
+There will be an answer, let it be.
+And when the night is cloudy,
+There is still a light that shines on me.
+Shine until tomorrow, let it be.
+I wake up to the sound of music
+Mother Mary comes to me
+Speaking words of wisdom, let it be.
+Let it be, let it be.
+Let it be, let it be.
+There will be no sorrow, let it be.
+Let it be, let it be.
+Let it be, let it be.
+Whisper words of wisdom, let it be. hoooo' hoooo' 
+    </textarea>
+  </body>
+</html>
