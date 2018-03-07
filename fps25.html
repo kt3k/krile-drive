@@ -217,7 +217,7 @@ sound.SoundManager = Object.derive({
     constructor: function() {
         this.storage = storage;
 
-        this.ctx = new webkitAudioContext();
+        this.ctx = new AudioContext();
         //this.bgm = new sound.SoundLoop(this.ctx, './sounds/skipmore_bgm_03.mp3', {autoplay: true});
         //this.bgm = new sound.SoundLoop(this.ctx, './sounds/skipmore_cave.mp3', {autoplay: true});
         this.bgm = new sound.SoundLoop(this.ctx, './sounds/cheetah.mp3', {autoplay: true, filterValue: 800});
